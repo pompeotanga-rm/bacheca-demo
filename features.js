@@ -686,6 +686,12 @@ function autoBoardLook(b) {
 function clickElement(id, ev, wasSelected) {
   const el = E(id); if (!el) return;
   if (ev.shiftKey || ev.metaKey) return;
+  if (ev.pointerType === 'touch' && wasSelected) {
+    if (el.type === 'board') return openBoard(el.target);
+    if (el.type === 'document') return openDocument(el);
+    if (el.type === 'sketch') return openSketch(el);
+    if (el.type === 'image' && !ev.target.closest('.caption')) return openLightbox(el);
+  }
   switch (el.type) {
     case 'board': if (wasSelected && ev.target.closest('.bname')) enterEdit(el, ev); break;
     case 'document': if (wasSelected && ev.target.closest('.bname')) enterEdit(el, ev); break;
@@ -717,7 +723,7 @@ function toolDragEnd(ev) {
   const td = toolDrag; toolDrag = null;
   td.ghost?.remove(); document.body.classList.remove('dragging'); $$('.col-ph').forEach(x => x.remove());
   $('#unsorted-panel')?.classList.remove('hot');
-  if (!td.moved) { if (td.type === 'draw') return toggleDraw(); if (td.type === 'image' || td.type === 'file') return addElement(td.type); return dragMeTip(ev); }
+  if (!td.moved) { if (td.pointerType === 'touch') return addElement(td.type); if (td.type === 'draw') return toggleDraw(); if (td.type === 'image' || td.type === 'file') return addElement(td.type); return dragMeTip(ev); }
   const up = $('#unsorted-panel'); const ur = up && !up.classList.contains('hidden') ? up.getBoundingClientRect() : null;
   const r = VP().getBoundingClientRect();
   if (ur && ev.clientX >= ur.left) { const el = addElement(td.type, { x: 0, y: 0 }); if (el) moveToUnsorted([el.id]); return; }
@@ -730,6 +736,7 @@ function toolDragEnd(ev) {
   if (el && !td.col) requestAnimationFrame(() => pushOverlaps(el.id));
 }
 function toolDragMove(ev) {
+  if (toolDrag.pointerType === 'touch' && Math.abs(ev.clientX - toolDrag.cx) > Math.abs(ev.clientY - toolDrag.cy)) return;
   if (!toolDrag.moved && Math.hypot(ev.clientX - toolDrag.cx, ev.clientY - toolDrag.cy) > 5) {
     toolDrag.moved = true; hidePopups(); $$('.tip-dragme').forEach(t => t.remove());
     const g = h('div'); g.id = 'dragghost'; g.appendChild(ghostFor(toolDrag.type)); document.body.appendChild(g); toolDrag.ghost = g;
@@ -819,12 +826,12 @@ function updateCtxToolbar() {
       if (it) { tbtn(ct, ICONS.indent, '', () => { it.indent = Math.min(3, (it.indent || 0) + 1); touch(el); const n = rebuild(el); commit(); focusEnd($(`[data-item="${it.id}"]`, n)); }, { cls: 'icon-only', title: 'Rientra (Tab)', keepFocus: true }); tbtn(ct, ICONS.outdent, '', () => { it.indent = Math.max(0, (it.indent || 0) - 1); touch(el); const n = rebuild(el); commit(); focusEnd($(`[data-item="${it.id}"]`, n)); }, { cls: 'icon-only', title: 'Riduci rientro (⇧Tab)', keepFocus: true, disabled: !it.indent }); }
       more(); break;
     }
-    case 'board': tbtn(ct, `<span class="tcolor-ico" style="background:${boardBg(S.boards[el.target] || {})}"></span>`, 'Colore', b => openBoardColorMenu(b, el)); tbtn(ct, ICONS.icon, 'Icona', b => openIconPicker(b, el)); rename(); more(); break;
+    case 'board': if (matchMedia('(max-width: 600px)').matches) tbtn(ct, ICONS.open, 'Apri', () => openBoard(el.target)); tbtn(ct, `<span class="tcolor-ico" style="background:${boardBg(S.boards[el.target] || {})}"></span>`, 'Colore', b => openBoardColorMenu(b, el)); tbtn(ct, ICONS.icon, 'Icona', b => openIconPicker(b, el)); rename(); more(); break;
     case 'column': color(); rename(); more(); break;
-    case 'document': color(); tbtn(ct, ICONS.cardview, 'Vista card', () => { el.cardView = !el.cardView; touch(el); rebuild(el); commit(); }, { on: !!el.cardView }); if (!el.cardView) rename(); more(); break;
+    case 'document': if (matchMedia('(max-width: 600px)').matches) tbtn(ct, ICONS.open, 'Apri', () => openDocument(el)); color(); tbtn(ct, ICONS.cardview, 'Vista card', () => { el.cardView = !el.cardView; touch(el); rebuild(el); commit(); }, { on: !!el.cardView }); if (!el.cardView) rename(); more(); break;
     case 'comment': more(); break;
     case 'color': labels(); react(); comment(); more(); break;
-    case 'table': labels(); react(); comment(); titleT(); captionT(); more(); break;
+    case 'table': tbtn(ct, ICONS.edit, 'Celle', () => tEnter(el.id, 0, 0)); labels(); react(); comment(); titleT(); captionT(); more(); break;
     case 'image': labels(); react(); comment(); titleT(); captionT(); tbtn(ct, ICONS.open, 'Apri', () => openLightbox(el)); more(); break;
     case 'file': labels(); react(); comment(); titleT(); tbtn(ct, ICONS.download, 'Scarica', () => downloadFile(el)); more(); break;
     case 'audio': labels(); react(); comment(); titleT(); more(); break;
@@ -1568,6 +1575,7 @@ function renderChrome() {
   if (document.activeElement !== t) t.textContent = b.id === 'home' ? '' : (b.title || 'Senza titolo');
   t.contentEditable = b.id === 'home' ? 'false' : 'true';
   $('#board-row').classList.toggle('home', b.id === 'home');
+  document.body.classList.toggle('home-board', b.id === 'home');
   $('#hdr-right').style.display = b.id === 'home' ? 'none' : '';
   $('#topbar').style.height = b.id === 'home' ? '44px' : '';
   document.documentElement.style.setProperty('--hdr', b.id === 'home' ? '44px' : '90px');

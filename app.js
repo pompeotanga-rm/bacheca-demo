@@ -866,6 +866,7 @@ function onPointerDown(ev) {
   if (!t.closest('#world') && t !== VP() && !t.closest('#stage')) return;
   blurEditing();
   if (!ev.shiftKey) { sel.clear(); refreshSel(); }
+  if (ev.pointerType === 'touch') return; // let the browser pan the canvas with a finger
   const p = toWorld(ev.clientX, ev.clientY);
   if (ev.button === 1 || spaceDown) { drag = { kind: 'pan', cx: ev.clientX, cy: ev.clientY, sl: VP().scrollLeft, st: VP().scrollTop }; ev.preventDefault(); return; }
   drag = { kind: 'marquee', start: p, base: new Set(sel) };
@@ -1060,6 +1061,8 @@ function elementAtPoint(cx, cy, excludeId) {
 const _origUp = onPointerUp;
 function finishPointer(ev) {
   if (drawState) return drawUp(ev);
+  if (ev.type === 'pointercancel' && toolDrag) { toolDrag.ghost?.remove(); toolDrag = null; document.body.classList.remove('dragging'); return; }
+  if (ev.type === 'pointercancel' && drag?.kind === 'pending') { drag = null; return; }
   if (toolDrag) return toolDragEnd(ev);
   if (!drag) return;
   const d = drag;
@@ -1086,8 +1089,8 @@ function finishPointer(ev) {
 /* ------------------------- Toolbar drag --------------------------- */
 let toolDrag = null;
 function onToolDown(ev, type) {
-  ev.preventDefault();
-  toolDrag = { type, cx: ev.clientX, cy: ev.clientY, moved: false, ghost: null };
+  if (ev.pointerType !== 'touch') ev.preventDefault();
+  toolDrag = { type, pointerType: ev.pointerType, cx: ev.clientX, cy: ev.clientY, moved: false, ghost: null };
 }
 function toolDragMove(ev) {
   if (!toolDrag.moved && Math.hypot(ev.clientX - toolDrag.cx, ev.clientY - toolDrag.cy) > 5) {
