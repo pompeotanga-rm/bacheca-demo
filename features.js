@@ -224,7 +224,7 @@ BUILD.link = function (el, card) {
 };
 BUILD.video = function (el, card) {
   if (!el.url && !el.fileId) {
-    urlInput(card, '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M10 9l5 3-5 3z"/></svg>', 'Incolla un link da YouTube o Vimeo', v => { el.url = v.trim(); rebuild(el); unfurlInto(el); });
+    urlInput(card, '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M10 9l5 3-5 3z"/></svg>', 'Incolla un link da YouTube o Vimeo', v => { let u = v.trim(); if (!/^[a-z]+:\/\//i.test(u)) u = 'https://' + u; el.url = u; rebuild(el); unfurlInto(el); });
     return;
   }
   if (el.fileId) { const fr = h('div', 'media-frame'); const v = h('video', 'no-drag'); v.controls = true; fileURL(el.fileId).then(u => v.src = u); fr.appendChild(v); card.appendChild(fr); const mt = h('div', 'lk-meta'); mt.innerHTML = `<div class="lk-head">${ICONS.play}<span class="lk-url"></span></div>`; $('.lk-url', mt).textContent = el.name || 'Video'; card.appendChild(mt); return; }
@@ -248,7 +248,7 @@ function urlInput(card, icon, ph, onSubmit) {
   const f = h('div', 'url-form', icon + `<input class="no-drag" placeholder="${esc(ph)}">`);
   const i = $('input', f);
   i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter' && i.value.trim()) { e.preventDefault(); onSubmit(i.value); } if (e.key === 'Escape') i.blur(); });
-  i.addEventListener('paste', e => { e.stopPropagation(); setTimeout(() => { if (/^https?:\/\//.test(i.value.trim())) onSubmit(i.value); }, 0); });
+  i.addEventListener('paste', e => { e.stopPropagation(); setTimeout(() => { if (/^(https?:\/\/|www\.|(m\.|music\.)?(youtube\.com|youtu\.be|vimeo\.com)\/)/i.test(i.value.trim())) onSubmit(i.value); }, 0); });
   card.appendChild(f);
 }
 
@@ -1351,7 +1351,11 @@ function coachTip(type, id) {
     const n = nodes.get(id); if (!n) return; const r = n.getBoundingClientRect();
     $$('.coach').forEach(c => c.remove());
     const t = h('div', 'coach', `<button class="cx">✕</button><b>${TIPS[type][0]}</b>${TIPS[type][1] ? `<small>${TIPS[type][1]}</small>` : ''}`);
-    document.body.appendChild(t); t.style.left = Math.min(innerWidth - 250, r.right + 14) + 'px'; t.style.top = clamp(r.top + r.height / 2 - t.offsetHeight / 2, 100, innerHeight - t.offsetHeight - 10) + 'px';
+    document.body.appendChild(t);
+    // never cover the card: to its right if there is room, otherwise below it, otherwise above it
+    const tw = t.offsetWidth, th = t.offsetHeight;
+    if (r.right + 14 + tw <= innerWidth - 8) { t.style.left = (r.right + 14) + 'px'; t.style.top = clamp(r.top + r.height / 2 - th / 2, 100, innerHeight - th - 10) + 'px'; }
+    else { t.classList.add('vert'); t.style.left = clamp(r.left + r.width / 2 - tw / 2, 8, innerWidth - tw - 8) + 'px'; const below = r.bottom + 14, above = r.top - th - 14; t.style.top = (below + th <= innerHeight - 80 ? below : Math.max(70, above)) + 'px'; }
     const close = () => t.remove(); $('.cx', t).onclick = close; setTimeout(close, 7000);
   }, 250);
 }

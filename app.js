@@ -469,7 +469,7 @@ function prettyHost(u) { try { return new URL(u).hostname.replace(/^www\./, '');
 function shortUrl(u) { return prettyHost(u); }
 function embedUrl(u) {
   let m;
-  if ((m = u.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/))) return { src: `https://www.youtube.com/embed/${m[1]}` };
+  if ((m = u.match(/(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([\w-]{6,})/))) return { src: `https://www.youtube.com/embed/${m[1]}` };
   if ((m = u.match(/vimeo\.com\/(\d+)/))) return { src: `https://player.vimeo.com/video/${m[1]}` };
   if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(u)) return { video: true };
   return { src: u };

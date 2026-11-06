@@ -507,10 +507,11 @@ body.drawmode .el { pointer-events: none; opacity: .5; }
 .tpl-panel .ti2 em { font-style: normal; font-size: 9px; font-weight: 700; background: #a3a7ae; color: var(--ink); border-radius: 3px; padding: 1px 4px; }
 .tpl-panel .go { width: 100%; margin-top: 12px; border: 0; background: var(--accent); color: #fff; border-radius: 4px; padding: 9px; font-weight: 600; font-size: 13px; }
 .tpl-panel label { display: flex; justify-content: center; gap: 6px; margin-top: 8px; font-size: 11px; color: #a3a7ae; align-items: center; }
-.coach { position: fixed; z-index: 85; width: 240px; background: var(--ink); color: #fff; border-radius: 8px; padding: 16px 16px 14px; text-align: center; box-shadow: var(--pop-shadow); }
+.coach { pointer-events: none; position: fixed; z-index: 85; width: 240px; background: var(--ink); color: #fff; border-radius: 8px; padding: 16px 16px 14px; text-align: center; box-shadow: var(--pop-shadow); }
 .coach b { display: block; font-size: 13px; line-height: 18px; font-weight: 600; }
 .coach small { display: block; font-size: 11px; color: #c6c9cd; margin-top: 6px; line-height: 15px; }
-.coach .cx { position: absolute; right: 6px; top: 4px; border: 0; background: none; color: #a3a7ae; font-size: 13px; }
+.coach .cx { pointer-events: auto; position: absolute; right: 6px; top: 4px; border: 0; background: none; color: #a3a7ae; font-size: 13px; }
+.coach.vert::before { left: 50%; top: -6px; margin: 0 0 0 -6px; border: 6px solid transparent; border-top: 0; border-bottom-color: var(--ink); border-right-color: transparent; }
 .coach::before { content: ""; position: absolute; left: -6px; top: 50%; margin-top: -6px; border: 6px solid transparent; border-left: 0; border-right-color: var(--ink); }
 .lightbox img { max-width: 92vw; max-height: 90vh; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
 #toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 9px 16px; border-radius: 6px; z-index: 130; font-size: 13px; display: flex; gap: 14px; align-items: center; }
