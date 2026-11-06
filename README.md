@@ -4,4 +4,4 @@ Versione statica di prova di Bacheca, pubblicata con GitHub Pages: <https://pomp
 
 Le board create qui sono salvate nel browser del dispositivo. Non vengono sincronizzate con il Mac o con altri dispositivi. Le anteprime complete dei link richiedono il server locale e non sono disponibili in questa versione statica.
 
-Su telefono la barra degli strumenti è in basso: tocca uno strumento per aggiungerlo, scorri il canvas da uno spazio vuoto e tocca una board due volte per aprirla. Per una tabella, selezionala, tocca una cella e usa “Modifica” nella barra in basso per scriverci.
+Su telefono la barra degli strumenti è in basso: tocca uno strumento per aggiungerlo, scorri il canvas da uno spazio vuoto e tocca una board due volte per aprirla. Per una tabella, selezionala, tocca una cella e usa “Modifica” nella barra in basso per scriverci. Per sommare due celle, seleziona la cella del risultato, scegli **Formula → SUM**, poi tocca la prima e la seconda cella: la formula viene completata automaticamente.

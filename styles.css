@@ -557,6 +557,7 @@ body.present .rz { display: none !important; }
 .el-table.cellmode .tbl td { cursor: cell; }
 .tsel { position: absolute; border: 2px solid var(--ink); pointer-events: none; z-index: 2; margin: -1px 0 0 -1px; }
 .tsel.multi { background: rgba(50,59,74,.05); }
+.tbl td.formula-ref { background: #e9f2ff !important; box-shadow: inset 0 0 0 2px #4b7bf5; }
 .tfill { position: absolute; width: 6px; height: 6px; margin: -4px 0 0 -4px; background: var(--ink); border-radius: 4px; cursor: crosshair; z-index: 3; box-shadow: 0 0 0 1px #fff; }
 .tfillprev { position: absolute; border: 1px dashed var(--ink); pointer-events: none; z-index: 2; margin: -1px 0 0 -1px; }
 .tmove-ind { position: absolute; background: var(--ink); z-index: 4; pointer-events: none; }

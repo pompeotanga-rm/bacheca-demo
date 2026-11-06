@@ -325,7 +325,7 @@ function tStyleSel(patch, toggleKey) {
 /* ---------------------------- Editing ------------------------------ */
 function tStartEdit(initial) {
   const s = TBL.st; const el = E(s.id); const td = cellNode(s.id, s.ar, s.ac); if (!td) return;
-  s.fr = s.ar; s.fc = s.ac; s.editing = true;
+  s.fr = s.ar; s.fc = s.ac; s.editing = true; s.formulaPick = null;
   const ed = h('div', 'editable tedit no-drag'); ed.contentEditable = 'plaintext-only';
   ed.textContent = initial != null ? initial : el.rows[s.ar][s.ac];
   const cv = $('.cv', td); cv.style.display = 'none'; td.appendChild(ed); s.ed = ed;
@@ -342,10 +342,24 @@ function tStartEdit(initial) {
 function tCommitEdit() {
   const s = TBL.st; if (!s?.editing) return;
   const el = E(s.id); const v = s.ed.textContent.replace(/ /g, ' ');
-  s.editing = false; s.ed = null;
+  s.editing = false; s.ed = null; s.formulaPick = null;
   if (el.rows[s.ar][s.ac] !== v) { el.rows[s.ar][s.ac] = v; touch(el); tRebuild(el); commit(); } else tRebuild(el);
 }
-function tCancelEdit() { const s = TBL.st; if (!s?.editing) return; s.editing = false; s.ed = null; tRebuild(E(s.id)); }
+function tCancelEdit() { const s = TBL.st; if (!s?.editing) return; s.editing = false; s.ed = null; s.formulaPick = null; tRebuild(E(s.id)); }
+
+function tFormulaHighlight(id, startR, startC, endR = startR, endC = startC) {
+  const n = nodes.get(id); if (!n) return;
+  $$('.formula-ref', n).forEach(x => x.classList.remove('formula-ref'));
+  for (let r = Math.min(startR, endR); r <= Math.max(startR, endR); r++)
+    for (let c = Math.min(startC, endC); c <= Math.max(startC, endC); c++)
+      cellNode(id, r, c)?.classList.add('formula-ref');
+}
+function tFinishFormulaPick(r, c) {
+  const s = TBL.st, pick = s?.formulaPick; if (!pick || !s.ed) return;
+  const first = colName(pick.c) + (pick.r + 1), last = colName(c) + (r + 1);
+  s.ed.textContent = pick.prefix + first + (first === last ? '' : ':' + last) + ')';
+  tCommitEdit();
+}
 function tMove(dr, dc, extend, wrap) {
   const s = TBL.st; const el = E(s.id);
   if (extend) { s.fr = clamp(s.fr + dr, 0, el.rows.length - 1); s.fc = clamp(s.fc + dc, 0, el.colW.length - 1); }
@@ -388,7 +402,18 @@ function tPointerDown(ev, id) {
   if (TBL.st?.editing && TBL.st.ed && td.contains(TBL.st.ed)) return true; // clicking in the editor
   if (TBL.st?.editing) {
     // formula editing: clicking another cell inserts a reference
-    const raw = TBL.st.ed.textContent;
+    const s = TBL.st, raw = s.ed.textContent;
+    if (s.formulaPick && raw === s.formulaPick.prefix + colName(s.formulaPick.c) + (s.formulaPick.r + 1)) {
+      ev.preventDefault(); tFinishFormulaPick(r, c); return true;
+    }
+    s.formulaPick = null;
+    if (/^=(?:SUM|SOMMA|AVERAGE|MIN|MAX|COUNT|COUNTA|MEDIAN|PRODUCT)\($/i.test(raw.trim())) {
+      ev.preventDefault(); s.formulaPick = { prefix: raw, r, c };
+      s.ed.textContent = raw + colName(c) + (r + 1);
+      tFormulaHighlight(id, r, c);
+      drag = { kind: 'tformula', id, r, c, endR: r, endC: c };
+      return true;
+    }
     if (raw.startsWith('=') && /[=(,;+\-*/^&<>:]$/.test(raw.trimEnd())) { ev.preventDefault(); TBL.st.ed.textContent = raw + colName(c) + (r + 1); focusEnd(TBL.st.ed); return true; }
     tCommitEdit();
   }
@@ -410,6 +435,11 @@ function tPointerMove(ev) {
   const hit = document.elementsFromPoint(ev.clientX, ev.clientY);
   const td = hit.map(x => x.closest?.('td')).find(x => x && x.closest('.el')?.dataset.id === d.id);
   const n = nodes.get(d.id);
+  if (d.kind === 'tformula' && td) {
+    d.endR = +td.dataset.r; d.endC = +td.dataset.c;
+    tFormulaHighlight(d.id, d.r, d.c, d.endR, d.endC);
+    return;
+  }
   if (d.kind === 'tsel' && td) { TBL.st.fr = +td.dataset.r; TBL.st.fc = +td.dataset.c; tPaint(); }
   if (d.kind === 'tselcol') { const s = hit.map(x => x.closest?.('.tbl-colhdr span')).find(Boolean); const c = s ? +s.dataset.c : td ? +td.dataset.c : null; if (c != null) { TBL.st.fc = c; tPaint(); } }
   if (d.kind === 'tselrow') { const s = hit.map(x => x.closest?.('.tbl-rowhdr span')).find(Boolean); const r = s ? +s.dataset.r : td ? +td.dataset.r : null; if (r != null) { TBL.st.fr = r; tPaint(); } }
@@ -449,6 +479,10 @@ function tPointerMove(ev) {
 function tPointerUp() {
   const d = drag; drag = null; const el = E(d.id); if (!el) return;
   const n = nodes.get(d.id);
+  if (d.kind === 'tformula') {
+    if (d.endR !== d.r || d.endC !== d.c) tFinishFormulaPick(d.endR, d.endC);
+    return;
+  }
   if (d.kind === 'tcolrz' || d.kind === 'trowrz') { touch(el); commit(); tRebuild(el); return; }
   if (d.kind === 'tmovecol' || d.kind === 'tmoverow') {
     $$('.tmove-ind', n).forEach(x => x.remove());
@@ -667,7 +701,7 @@ function tToolbar(ct) {
   btn('<i style="font-family:Georgia,serif;font-size:16px">fx</i>', 'Formula', b => pop(b, m => {
     m.appendChild(h('div', 'mlabel', single ? 'Inserisci formula' : 'Formula sotto la selezione'));
     FN_LIST.forEach(f => mi(m, `<code>${f}</code>`, () => {
-      if (single) { tStartEdit(`=${f}(`); }
+      if (single) { tStartEdit(`=${f}(`); if (f === 'SUM') toast('Tocca la prima cella, poi l’ultima da sommare'); }
       else { // put result below each column (or right of row)
         const vertical = r1 > r0; const targetR = vertical ? r1 + 1 : r0; const targetC = vertical ? c0 : c1 + 1;
         if (vertical && targetR >= el.rows.length) tableOp(el, 'rowBelow', el.rows.length - 1, 0);
