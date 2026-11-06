@@ -633,8 +633,10 @@ async function parseXlsx(buf) {
 /* ----------------------- Contextual toolbar (cells) ------------------ */
 function tToolbar(ct) {
   const s = TBL.st; const el = E(s.id); const st = getSt(el, s.ar, s.ac);
+  const single = TBL.rect().r0 === TBL.rect().r1 && TBL.rect().c0 === TBL.rect().c1;
   const btn = (icon, label, fn, disabled) => { const b = h('div', 'tool' + (disabled ? ' disabled' : ''), `<div class="ti">${icon}</div><span>${label}</span>`); if (!disabled) b.onclick = e => { e.stopPropagation(); fn(b); }; ct.appendChild(b); return b; };
   const back = h('div', 'tool ctx-back', '<div class="ti"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></div>'); back.title = 'Esci dalla modalità cella (Esc)'; back.onclick = () => { tExit(); sel.clear(); sel.add(el.id); refreshSel(); }; ct.appendChild(back);
+  btn('<svg viewBox="0 0 24 24"><path d="m4 16 12-12 4 4L8 20H4v-4Z"/><path d="m14 6 4 4"/></svg>', 'Modifica', () => tStartEdit(), !single);
   const pop = (b, build) => { const r = b.getBoundingClientRect(); menuAt(r.right + 6, r.top, build); };
   btn('<b style="font-family:Georgia,serif;font-size:17px">T<sub style="font-size:9px;color:#e8584f">a</sub></b>', 'Stile testo', b => pop(b, m => {
     const row = h('div', 'tfmt'); [['bold', '<b>B</b>'], ['italic', '<i>I</i>'], ['strike', '<s>S</s>']].forEach(([k, l]) => { const x = h('button', st[k] ? 'on' : '', l); x.onclick = () => { tStyleSel(null, k); hidePopups(); }; row.appendChild(x); }); m.appendChild(row);
@@ -661,7 +663,6 @@ function tToolbar(ct) {
     m.appendChild(h('div', 'mlabel', 'Colore cella'));
     const p = h('div', 'palette'); CELL_BG.forEach(c => { const d = h('div', 'pc' + (c ? '' : ' none') + ((st.bg || null) === c ? ' on' : '')); d.style.background = c || '#fff'; d.onclick = () => { tStyleSel({ bg: c }); hidePopups(); }; p.appendChild(d); }); m.appendChild(p);
   }));
-  const single = TBL.rect().r0 === TBL.rect().r1 && TBL.rect().c0 === TBL.rect().c1;
   const { r0, r1, c0, c1 } = TBL.rect();
   btn('<i style="font-family:Georgia,serif;font-size:16px">fx</i>', 'Formula', b => pop(b, m => {
     m.appendChild(h('div', 'mlabel', single ? 'Inserisci formula' : 'Formula sotto la selezione'));

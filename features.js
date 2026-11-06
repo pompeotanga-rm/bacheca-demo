@@ -343,7 +343,7 @@ function openDuePicker(anchor, el, it) {
     const days = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
     for (let d = 1; d <= days; d++) {
       const dt = new Date(view.getFullYear(), view.getMonth(), d); const b = h('button', '', d);
-      if (dt < today) b.classList.add('past'); if (dt.getTime() === today.getTime()) b.classList.add('today'); if (it.due === iso(dt)) b.classList.add('sel');
+      if (dt < today) { b.classList.add('past'); b.disabled = true; } if (dt.getTime() === today.getTime()) b.classList.add('today'); if (it.due === iso(dt)) b.classList.add('sel');
       b.onclick = () => { it.due = iso(dt); if (it.remind == null) it.remind = '9am'; touch(el); rebuild(el); commit(); draw(); };
       g.appendChild(b);
     }
