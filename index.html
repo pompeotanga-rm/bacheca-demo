@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bacheca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400..700;1,400..700&family=Roboto+Mono&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header id="topbar">
+  <div id="crumbs"></div>
+  <div id="top-actions">
+    <button class="ico" id="btn-undo" title="Annulla (⌘Z)"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="ico" id="btn-redo" title="Ripeti (⇧⌘Z)"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    <span class="sep"></span>
+    <button class="ico" id="btn-mobile" title="Note non ordinate"><svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg><small id="mobile-count">0</small></button>
+    <button class="ico" id="btn-help" title="Scorciatoie e aiuto"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></button>
+    <button class="ico" id="btn-search" title="Cerca (⌘F)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+    <button class="ico" id="btn-notif" title="Notifiche"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+    <button class="ico" id="btn-settings" title="Impostazioni"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  </div>
+  <div id="board-row">
+    <div id="save-status"></div>
+    <h1 id="board-title" spellcheck="false"></h1>
+    <div id="hdr-right">
+      <button class="hbtn" id="btn-share"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M19 8v6M16 11h6"/></svg>Condividi</button>
+      <button class="hbtn" id="btn-export">Esporta <i class="chev"></i></button>
+      <button class="hbtn" id="btn-view">Vista <i class="chev"></i></button>
+    </div>
+  </div>
+</header>
+<button id="unsorted-btn"><b>0</b> Non ordinati</button>
+<aside id="unsorted-panel" class="hidden"><div class="up-head"><span>Non ordinati</span><button id="unsorted-close">Chiudi</button></div><div class="up-body"></div><div class="up-empty">Un posto dove mettere le cose mentre decidi dove collocarle</div></aside>
+
+<aside id="toolbar">
+  <div class="tool" data-tool="note"><div class="ti"><svg viewBox="0 0 28 20"><rect x="1" y="1" width="26" height="18" rx="2"/><path d="M6 7h16M6 11h16M6 15h10"/></svg></div><span>Nota</span></div>
+  <div class="tool" data-tool="link"><div class="ti"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div><span>Link</span></div>
+  <div class="tool" data-tool="todo"><div class="ti"><svg viewBox="0 0 28 20"><rect x="1" y="1" width="26" height="18" rx="2"/><path d="m5 7 2 2 3-3M5 13l2 2 3-3M13 8h9M13 14h9"/></svg></div><span>To-do</span></div>
+  <div class="tool" data-tool="line"><div class="ti"><svg viewBox="0 0 24 24"><path d="M4 20 20 4"/><path d="M12 4h8v8"/></svg></div><span>Linea</span></div>
+  <div class="tool" data-tool="board"><div class="ti board-ti"><svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" fill="#4b7bf5" stroke="none"/><rect x="6.5" y="6.5" width="4.5" height="4.5" rx="1" fill="#fff" stroke="none"/><rect x="13" y="6.5" width="4.5" height="4.5" rx="1" fill="#fff" stroke="none"/><rect x="6.5" y="13" width="4.5" height="4.5" rx="1" fill="#fff" stroke="none"/><rect x="13" y="13" width="4.5" height="4.5" rx="1" fill="#fff" stroke="none"/></svg></div><span>Board</span></div>
+  <div class="tool" data-tool="column"><div class="ti"><svg viewBox="0 0 24 28"><rect x="1" y="1" width="22" height="26" rx="2"/><path d="M1 6h22"/><rect x="4" y="9" width="16" height="6" rx="1"/><rect x="4" y="18" width="16" height="6" rx="1"/></svg></div><span>Colonna</span></div>
+  <div class="tool" data-tool="comment"><div class="ti"><svg viewBox="0 0 28 20"><path d="M2 2h24v13H9l-5 4v-4H2z" fill="#e8ecfb" stroke="#6d83d8"/><path d="M6 7h16M6 11h10" stroke="#6d83d8"/></svg></div><span>Commento</span></div>
+  <div class="tool" id="tool-more"><div class="ti"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/></svg></div></div>
+  <div class="tsep"></div>
+  <div class="tool" data-tool="image"><div class="ti"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg></div><span>Immagine</span></div>
+  <div class="tool" data-tool="file"><div class="ti"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div><span>Carica</span></div>
+  <div class="tool" data-tool="draw" id="tool-draw"><div class="ti"><svg viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg></div><span>Disegna</span></div>
+  <div class="tspacer"></div>
+  <div class="tool" id="tool-trash"><div class="ti"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M5 6l1.5 15h11L19 6"/><path d="M9 6V3h6v3"/></svg></div><span>Cestino</span></div>
+</aside>
+
+<div id="more-menu" class="popup hidden">
+  <div class="tool" data-tool="heading"><div class="ti"><svg viewBox="0 0 24 24"><path d="M5 5h14M12 5v14"/></svg></div><span>Titolo</span></div>
+  <div class="tool" data-tool="video"><div class="ti"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="3" fill="#6f5ce6" stroke="none"/><path d="m10 9 5 3-5 3z" fill="#fff" stroke="none"/></svg></div><span>Video</span></div>
+  <div class="tool" data-tool="map"><div class="ti"><svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z" fill="#e7f1df" stroke="#79a65c"/><path d="M12 7a3 3 0 0 0-3 3c0 2.5 3 5 3 5s3-2.5 3-5a3 3 0 0 0-3-3z" fill="#e8584f" stroke="none"/></svg></div><span>Mappa</span></div>
+  <div class="tool" data-tool="audio"><div class="ti"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="3" fill="#3fb67c" stroke="none"/><path d="M7 10v4M10 8v8M13 10v4M16 9v6" stroke="#fff"/></svg></div><span>Audio</span></div>
+  <div class="tool" data-tool="document"><div class="ti"><svg viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></div><span>Documento</span></div>
+  <div class="tool" data-tool="color"><div class="ti"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="12" height="12" rx="2" fill="#2f6f8f" stroke="none"/><rect x="9" y="9" width="12" height="12" rx="2" fill="#e0475b" stroke="none"/></svg></div><span>Colore</span></div>
+  <div class="tool" data-tool="sketch"><div class="ti"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 16c2-5 4 1 6-3s3-2 6-5"/></svg></div><span>Schizzo</span></div>
+  <div class="tool" data-tool="table"><div class="ti"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="1"/><path d="M2 9h20M2 14.5h20M9 4v16M15.5 4v16"/></svg></div><span>Tabella</span></div>
+</div>
+
+<main id="viewport">
+  <div id="stage"><div id="world"></div></div>
+</main>
+
+<div id="zoombar">
+  <button id="zoom-out" title="Riduci (⌘-)">−</button>
+  <span id="zoom-val">100%</span>
+  <button id="zoom-in" title="Ingrandisci (⌘+)">+</button>
+</div>
+
+<div id="drawbar" class="hidden">
+  <div class="dcolors"></div>
+  <div class="dsizes"></div>
+  <button class="dbtn" id="draw-done">Fine</button>
+</div>
+
+<div id="formatbar" class="hidden"></div>
+<div id="ctxmenu" class="popup hidden"></div>
+<div id="panel" class="hidden"></div>
+<div id="overlay" class="hidden"></div>
+<input type="file" id="file-input" class="hidden" multiple>
+<div id="toast" class="hidden"></div>
+
+<script src="app.js"></script>
+<script src="table.js"></script>
+<script src="features.js"></script>
+</body>
+</html>
