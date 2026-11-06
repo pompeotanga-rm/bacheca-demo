@@ -46,9 +46,106 @@ const FN = {
   TODAY: () => new Date().toISOString().slice(0, 10), NOW: () => new Date().toLocaleString('it-IT'),
   COUNTIF: a => { const t = a[1]; return flat([a[0]]).filter(x => matchCrit(x, t)).length; },
   SUMIF: a => { const r = flat([a[0]]), s = a[2] != null ? flat([a[2]]) : r; return r.reduce((acc, x, i) => acc + (matchCrit(x, a[1]) && isNum(s[i]) ? s[i] : 0), 0); },
+  AVERAGEIF: a => { const r = flat([a[0]]), s = a[2] != null ? flat([a[2]]) : r; const v = r.map((x, i) => (matchCrit(x, a[1]) ? s[i] : null)).filter(isNum); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : err('#DIV/0!'); },
+  SUMIFS: a => { const s = flat([a[0]]); return s.reduce((acc, x, i) => acc + (isNum(x) && critAll(a, 1, i) ? x : 0), 0); },
+  COUNTIFS: a => flat([a[0]]).filter((x, i) => critAll(a, 0, i)).length,
+  AVERAGEIFS: a => { const s = flat([a[0]]); const v = s.filter((x, i) => isNum(x) && critAll(a, 1, i)); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : err('#DIV/0!'); },
+  COUNTBLANK: a => flat(a).filter(x => x === '' || x == null).length,
+  LARGE: a => { const n = flat([a[0]]).filter(isNum).sort((x, y) => y - x); const k = num(a[1]); return k >= 1 && k <= n.length ? n[k - 1] : err('#NUM!'); },
+  SMALL: a => { const n = flat([a[0]]).filter(isNum).sort((x, y) => x - y); const k = num(a[1]); return k >= 1 && k <= n.length ? n[k - 1] : err('#NUM!'); },
+  SUMPRODUCT: a => { const L = a.map(x => flat([x]).map(v => (isNum(v) ? v : 0))); const n = Math.min(...L.map(x => x.length)); let t = 0; for (let i = 0; i < n; i++) t += L.reduce((p, x) => p * x[i], 1); return t; },
+  ROUNDUP: a => { const p = Math.pow(10, num(a[1] ?? 0)), x = num(a[0]); return (x < 0 ? -Math.ceil(-x * p - 1e-9) : Math.ceil(x * p - 1e-9)) / p; },
+  ROUNDDOWN: a => { const p = Math.pow(10, num(a[1] ?? 0)); return Math.trunc(num(a[0]) * p + 1e-9 * Math.sign(num(a[0]))) / p; },
+  TRUNC: a => FN.ROUNDDOWN(a),
+  CEILING: a => { const m = num(a[1] ?? 1); return m ? Math.ceil(num(a[0]) / m - 1e-9) * m : 0; },
+  FLOOR: a => { const m = num(a[1] ?? 1); return m ? Math.floor(num(a[0]) / m + 1e-9) * m : 0; },
+  SIGN: a => Math.sign(num(a[0])),
+  EXP: a => Math.exp(num(a[0])),
+  LN: a => { const x = num(a[0]); return x > 0 ? Math.log(x) : err('#NUM!'); },
+  LOG: a => { const x = num(a[0]), b = num(a[1] ?? 10); return x > 0 && b > 0 && b !== 1 ? Math.log(x) / Math.log(b) : err('#NUM!'); },
+  LOG10: a => FN.LOG([a[0], 10]),
+  PI: () => Math.PI,
+  RAND: () => Math.random(),
+  RANDBETWEEN: a => { const lo = Math.ceil(num(a[0])), hi = Math.floor(num(a[1])); return lo <= hi ? lo + Math.floor(Math.random() * (hi - lo + 1)) : err('#NUM!'); },
+  ISNUMBER: a => isNum(a[0]), ISTEXT: a => typeof a[0] === 'string' && a[0] !== '', ISBLANK: a => a[0] === '' || a[0] == null,
+  VALUE: a => { const n = parseNumber(str(a[0])); return n == null ? err('#VALUE!') : n; },
+  MID: a => str(a[0]).substr(Math.max(0, num(a[1]) - 1), num(a[2])),
+  FIND: a => { const i = str(a[1]).indexOf(str(a[0]), Math.max(0, num(a[2] ?? 1) - 1)); return i < 0 ? err('#VALUE!') : i + 1; },
+  SEARCH: a => { const i = str(a[1]).toLowerCase().indexOf(str(a[0]).toLowerCase(), Math.max(0, num(a[2] ?? 1) - 1)); return i < 0 ? err('#VALUE!') : i + 1; },
+  SUBSTITUTE: a => (str(a[1]) === '' ? str(a[0]) : str(a[0]).split(str(a[1])).join(str(a[2]))),
+  REPT: a => str(a[0]).repeat(Math.max(0, Math.min(1000, num(a[1])))),
+  PROPER: a => str(a[0]).toLowerCase().replace(/(^|[^\p{L}])(\p{L})/gu, (m, x, y) => x + y.toUpperCase()),
+  EXACT: a => str(a[0]) === str(a[1]),
+  TEXT: a => fmtText(a[0], str(a[1])),
+  DATE: a => { const d = Date.UTC(num(a[0]), num(a[1]) - 1, num(a[2])); return Math.floor(d / 86400000) + 25569; },
+  YEAR: a => toDate(a[0]).getUTCFullYear(), MONTH: a => toDate(a[0]).getUTCMonth() + 1, DAY: a => toDate(a[0]).getUTCDate(),
+  DAYS: a => Math.round((toDate(a[0]) - toDate(a[1])) / 86400000),
+  WEEKDAY: a => { const d = toDate(a[0]).getUTCDay(); return num(a[1] ?? 1) === 2 ? (d + 6) % 7 + 1 : d + 1; },
+  EDATE: a => { const d = toDate(a[0]); return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + num(a[1]), d.getUTCDate()) / 86400000) + 25569; },
+  VLOOKUP: a => lookup(a[0], a[1], num(a[2]), a[3] === undefined ? true : truthy(a[3]), false),
+  HLOOKUP: a => lookup(a[0], a[1], num(a[2]), a[3] === undefined ? true : truthy(a[3]), true),
+  INDEX: a => { const arr = flat([a[0]]), cols = a[0].cols || 1; const r = num(a[1] ?? 1), c = num(a[2] ?? 1); const rows = Math.ceil(arr.length / cols); if (cols === 1 && a[2] === undefined) return r >= 1 && r <= arr.length ? arr[r - 1] : err('#REF!'); if (r < 1 || c < 1 || r > rows || c > cols) return err('#REF!'); return arr[(r - 1) * cols + c - 1]; },
+  MATCH: a => { const arr = flat([a[1]]), t = a[2] === undefined ? 1 : num(a[2]); const i = t === 0 ? arr.findIndex(x => looseEq(x, a[0])) : approxIdx(arr, a[0], t); return i < 0 ? err('#N/A') : i + 1; },
+  XLOOKUP: a => { const k = flat([a[1]]), v = flat([a[2]]); const i = k.findIndex(x => looseEq(x, a[0])); return i < 0 ? (a.length > 3 ? a[3] : err('#N/A')) : v[i]; },
+  // lazy (receive thunks, so the branch not taken is never evaluated)
+  IF: a => (truthy(a[0]()) ? (a[1] ? a[1]() : true) : (a[2] ? a[2]() : false)),
+  IFERROR: a => { try { return a[0](); } catch (e) { if (e.cellErr) return a[1] ? a[1]() : ''; throw e; } },
+  ISERROR: a => { try { a[0](); return false; } catch (e) { if (e.cellErr) return true; throw e; } },
 };
-FN.SOMMA = FN.SUM; FN.CONTA = FN.COUNT; FN.SE = FN.IF;
-const FN_LIST = ['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'COUNTA', 'MEDIAN', 'PRODUCT', 'ROUND', 'IF', 'COUNTIF', 'SUMIF', 'CONCAT', 'LEN', 'UPPER', 'LOWER', 'ABS', 'TODAY'];
+const LAZY = new Set([FN.IF, FN.IFERROR, FN.ISERROR]);
+Object.assign(FN, {
+  // Italian names (Google Sheets / Excel IT)
+  SOMMA: FN.SUM, MEDIA: FN.AVERAGE, CONTA: FN.COUNT, 'CONTA.NUMERI': FN.COUNT, 'CONTA.VALORI': FN.COUNTA, SE: FN.IF, E: FN.AND, O: FN.OR, NON: FN.NOT,
+  MEDIANA: FN.MEDIAN, PRODOTTO: FN.PRODUCT, ARROTONDA: FN.ROUND, 'ARROTONDA.PER.ECCESSO': FN.ROUNDUP, 'ARROTONDA.PER.DIFETTO': FN.ROUNDDOWN,
+  ASS: FN.ABS, RADQ: FN.SQRT, POTENZA: FN.POWER, RESTO: FN.MOD, INT: FN.INT, 'CONTA.SE': FN.COUNTIF, 'SOMMA.SE': FN.SUMIF, 'MEDIA.SE': FN.AVERAGEIF,
+  'CONTA.PIÙ.SE': FN.COUNTIFS, 'SOMMA.PIÙ.SE': FN.SUMIFS, 'CONTA.VUOTE': FN.COUNTBLANK, 'SE.ERRORE': FN.IFERROR, 'VAL.ERRORE': FN.ISERROR,
+  'CERCA.VERT': FN.VLOOKUP, 'CERCA.ORIZZ': FN.HLOOKUP, 'CERCA.X': FN.XLOOKUP, INDICE: FN.INDEX, CONFRONTA: FN.MATCH,
+  LUNGHEZZA: FN.LEN, MAIUSC: FN.UPPER, MINUSC: FN.LOWER, ANNULLA: FN.TRIM, 'MAIUSC.INIZ': FN.PROPER, STRINGA: FN.TEXT, TESTO: FN.TEXT, SINISTRA: FN.LEFT, DESTRA: FN.RIGHT,
+  STRINGA_ESTRAI: FN.MID, 'STRINGA.ESTRAI': FN.MID, TROVA: FN.FIND, RICERCA: FN.SEARCH, SOSTITUISCI: FN.SUBSTITUTE, RIPETI: FN.REPT, VALORE: FN.VALUE,
+  OGGI: FN.TODAY, ADESSO: FN.NOW, DATA: FN.DATE, ANNO: FN.YEAR, MESE: FN.MONTH, GIORNO: FN.DAY, GIORNI: FN.DAYS, 'GIORNO.SETTIMANA': FN.WEEKDAY, DATA_MESE: FN.EDATE, 'DATA.MESE': FN.EDATE,
+  'VAL.NUMERO': FN.ISNUMBER, 'VAL.TESTO': FN.ISTEXT, 'VAL.VUOTO': FN.ISBLANK, 'PI.GRECO': FN.PI, CASUALE: FN.RAND, 'CASUALE.TRA': FN.RANDBETWEEN,
+  MATR_SOMMA_PRODOTTO: FN.SUMPRODUCT, 'MATR.SOMMA.PRODOTTO': FN.SUMPRODUCT, 'GRANDE': FN.LARGE, PICCOLO: FN.SMALL, SEGNO: FN.SIGN, LN: FN.LN, LOG10: FN.LOG10,
+});
+const FN_GROUPS = [
+  ['Matematica', ['SUM', 'AVERAGE', 'MIN', 'MAX', 'COUNT', 'COUNTA', 'COUNTBLANK', 'MEDIAN', 'PRODUCT', 'SUMPRODUCT', 'LARGE', 'SMALL']],
+  ['Arrotondamento', ['ROUND', 'ROUNDUP', 'ROUNDDOWN', 'CEILING', 'FLOOR', 'INT', 'ABS', 'SQRT', 'POWER', 'MOD', 'LN', 'LOG', 'EXP', 'PI', 'RAND', 'RANDBETWEEN']],
+  ['Condizioni', ['IF', 'IFERROR', 'AND', 'OR', 'NOT', 'COUNTIF', 'SUMIF', 'AVERAGEIF', 'COUNTIFS', 'SUMIFS', 'ISNUMBER', 'ISBLANK']],
+  ['Ricerca', ['VLOOKUP', 'HLOOKUP', 'XLOOKUP', 'INDEX', 'MATCH']],
+  ['Testo', ['CONCAT', 'LEN', 'UPPER', 'LOWER', 'PROPER', 'TRIM', 'LEFT', 'RIGHT', 'MID', 'FIND', 'SUBSTITUTE', 'REPT', 'TEXT', 'VALUE']],
+  ['Date', ['TODAY', 'NOW', 'DATE', 'YEAR', 'MONTH', 'DAY', 'DAYS', 'WEEKDAY', 'EDATE']],
+];
+const FN_LIST = FN_GROUPS.flatMap(g => g[1]);
+function critAll(a, from, i) { for (let k = from; k + 1 < a.length; k += 2) if (!matchCrit(flat([a[k]])[i], a[k + 1])) return false; return true; }
+function looseEq(x, y) { if (isNum(x) && isNum(y)) return x === y; const a = isNum(x) ? x : (parseNumber(x) ?? str(x).toLowerCase()), b = isNum(y) ? y : (parseNumber(y) ?? str(y).toLowerCase()); return a === b; }
+function approxIdx(arr, k, t) { let best = -1; arr.forEach((x, i) => { if (t > 0 ? (isNum(x) && isNum(k) ? x <= k : str(x).toLowerCase() <= str(k).toLowerCase()) : (isNum(x) && isNum(k) ? x >= k : str(x).toLowerCase() >= str(k).toLowerCase())) { if (best < 0 || (t > 0 ? x >= arr[best] : x <= arr[best])) best = i; } }); return best; }
+function lookup(key, tbl, idx, approx, horiz) {
+  const arr = flat([tbl]); const cols = tbl.cols || 1; const rows = Math.ceil(arr.length / cols);
+  const at = (r, c) => arr[r * cols + c];
+  const n = horiz ? cols : rows, m = horiz ? rows : cols; if (idx < 1 || idx > m) err('#REF!');
+  const keyAt = i => (horiz ? at(0, i) : at(i, 0)), valAt = i => (horiz ? at(idx - 1, i) : at(i, idx - 1));
+  let hit = -1;
+  if (!approx) { for (let i = 0; i < n; i++) if (looseEq(keyAt(i), key)) { hit = i; break; } }
+  else hit = approxIdx(Array.from({ length: n }, (_, i) => keyAt(i)), key, 1);
+  return hit < 0 ? err('#N/A') : valAt(hit);
+}
+function toDate(v) {
+  if (isNum(v)) return new Date(Math.round((v - 25569) * 86400000));
+  const s = str(v).trim(); let m;
+  if ((m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/))) return new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
+  if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  const d = new Date(s); return isNaN(d) ? err('#VALUE!') : d;
+}
+function fmtText(v, f) {
+  if (!isNum(v)) { const n = parseNumber(str(v)); if (n == null) return str(v); v = n; }
+  if (/[dmyh]/i.test(f) && !/^[0#,.%\s]*$/.test(f)) {
+    const d = toDate(v); const p2 = x => String(x).padStart(2, '0');
+    return f.replace(/yyyy|yy|mmmm|mmm|mm|dd|d|hh|ss|m/gi, t => ({ yyyy: d.getUTCFullYear(), yy: p2(d.getUTCFullYear() % 100), mmmm: d.toLocaleDateString('it-IT', { month: 'long', timeZone: 'UTC' }), mmm: d.toLocaleDateString('it-IT', { month: 'short', timeZone: 'UTC' }), mm: p2(d.getUTCMonth() + 1), dd: p2(d.getUTCDate()), d: d.getUTCDate(), hh: p2(d.getUTCHours()), ss: p2(d.getUTCSeconds()), m: d.getUTCMonth() + 1 })[t.toLowerCase()]);
+  }
+  const pct = f.includes('%'); if (pct) v *= 100;
+  const dec = (f.split('.')[1] || '').replace(/[^0#]/g, '').length;
+  const out = v.toLocaleString('it-IT', { minimumFractionDigits: dec, maximumFractionDigits: dec, useGrouping: f.includes(',') });
+  return f.replace(/[0#,.]+/, out);
+}
 function err(e) { const x = new Error(e); x.cellErr = e; throw x; }
 function flat(a) { const out = []; (function f(v) { if (Array.isArray(v)) v.forEach(f); else out.push(v); })(a); return out; }
 const isNum = x => typeof x === 'number' && isFinite(x);
@@ -78,6 +175,7 @@ function tokenize(src) {
     if (/\s/.test(ch)) { i++; continue; }
     let m;
     const rest = src.slice(i);
+    if ((m = rest.match(/^\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})(?![A-Za-z0-9_.(])/))) { t.push({ k: 'range', v: [m[0], m[1], '1', m[2], '1048576'] }); i += m[0].length; continue; }
     if ((m = rest.match(/^\$?([A-Za-z]{1,3})\$?(\d+)(?::\$?([A-Za-z]{1,3})\$?(\d+))?/)) && !/^[A-Za-z]+\(/.test(rest.slice(0, m[0].length + 1).replace(/\d+\($/, ''))) {
       // make sure it's not a function name like LOG10(
       if (!/^[A-Za-z]{1,3}\d+\(/.test(rest)) { t.push({ k: m[3] ? 'range' : 'ref', v: m }); i += m[0].length; continue; }
@@ -92,14 +190,14 @@ function tokenize(src) {
 }
 function evalFormula(el, src, visiting) {
   const toks = tokenize(src); let p = 0;
-  const peek = () => toks[p], next = () => toks[p++];
-  const expect = v => { const t = next(); if (!t || t.v !== v) err('#ERR'); };
+  const peek = () => (toks[p]?.k === 'op' ? toks[p] : undefined), next = () => toks[p++]; // peek() only ever sees operators, so the strings "-" or "," are not mistaken for them
+  const expect = v => { const t = next(); if (!t || t.k !== 'op' || t.v !== v) err('#ERR'); };
   const cellVal = (r, c) => {
     if (r < 0 || c < 0 || r >= el.rows.length || c >= el.colW.length) err('#REF!');
     const k = stKey(r, c); if (visiting.has(k)) err('#CIRC!');
-    return cellValue(el, r, c, visiting);
+    const v = cellValue(el, r, c, visiting); if (v && v.error) err(v.error); return v;
   };
-  const comparison = () => { let a = concat(); while (peek() && ['=', '<', '>', '<=', '>=', '<>'].includes(peek().v)) { const op = next().v; const b = concat(); const x = isNum(a) && isNum(b) ? [a, b] : [str(a).toLowerCase(), str(b).toLowerCase()]; a = op === '=' ? x[0] === x[1] : op === '<>' ? x[0] !== x[1] : op === '<' ? x[0] < x[1] : op === '>' ? x[0] > x[1] : op === '<=' ? x[0] <= x[1] : x[0] >= x[1]; } return a; };
+  const comparison = () => { let a = concat(); while (peek() && ['=', '<', '>', '<=', '>=', '<>'].includes(peek().v)) { const op = next().v; let b = concat(); if (a === '' && isNum(b)) a = 0; else if (b === '' && isNum(a)) b = 0; /* empty cell = 0 */ const x = isNum(a) && isNum(b) ? [a, b] : [str(a).toLowerCase(), str(b).toLowerCase()]; a = op === '=' ? x[0] === x[1] : op === '<>' ? x[0] !== x[1] : op === '<' ? x[0] < x[1] : op === '>' ? x[0] > x[1] : op === '<=' ? x[0] <= x[1] : x[0] >= x[1]; } return a; };
   const concat = () => { let a = additive(); while (peek()?.v === '&') { next(); a = str(a) + str(additive()); } return a; };
   const additive = () => { let a = term(); while (peek() && (peek().v === '+' || peek().v === '-')) { const op = next().v; const b = term(); a = op === '+' ? num(a) + num(b) : num(a) - num(b); } return a; };
   const term = () => { let a = power(); while (peek() && (peek().v === '*' || peek().v === '/')) { const op = next().v; const b = power(); if (op === '/' && num(b) === 0) err('#DIV/0!'); a = op === '*' ? num(a) * num(b) : num(a) / num(b); } return a; };
@@ -111,16 +209,31 @@ function evalFormula(el, src, visiting) {
     if (t.k === 'ref') return cellVal(+t.v[2] - 1, colIndex(t.v[1]));
     if (t.k === 'range') {
       const r0 = +t.v[2] - 1, c0 = colIndex(t.v[1]), r1 = +t.v[4] - 1, c1 = colIndex(t.v[3]); const out = [];
-      for (let r = Math.min(r0, r1); r <= Math.max(r0, r1); r++) for (let c = Math.min(c0, c1); c <= Math.max(c0, c1); c++) { if (r >= el.rows.length || c >= el.colW.length) continue; out.push(cellVal(r, c)); }
+      const rLo = Math.min(r0, r1), rHi = Math.min(Math.max(r0, r1), el.rows.length - 1), cLo = Math.min(c0, c1), cHi = Math.min(Math.max(c0, c1), el.colW.length - 1);
+      for (let r = rLo; r <= rHi; r++) for (let c = cLo; c <= cHi; c++) out.push(cellVal(r, c));
+      out.cols = Math.max(0, cHi - cLo + 1);
       return out;
     }
     if (t.k === 'name') {
       const f = FN[t.v]; if (!f) err('#NAME?');
       expect('('); const args = [];
-      if (peek()?.v !== ')') { args.push(comparison()); while (peek()?.v === ',') { next(); args.push(comparison()); } }
-      expect(')'); return f(args);
+      // each argument is evaluated on its own so an error in one does not break the parse of the others
+      const arg = () => {
+        const start = p;
+        try { return { v: comparison() }; } catch (e) {
+          if (!e.cellErr) throw e;
+          p = start; let depth = 0;
+          while (p < toks.length && !(depth === 0 && toks[p].k === 'op' && (toks[p].v === ',' || toks[p].v === ')'))) { if (toks[p].k === 'op') { if (toks[p].v === '(') depth++; else if (toks[p].v === ')') depth--; } p++; }
+          return { e };
+        }
+      };
+      if (peek()?.v !== ')') { args.push(arg()); while (peek()?.v === ',') { next(); args.push(arg()); } }
+      expect(')');
+      if (LAZY.has(f)) return f(args.map(a => () => { if (a.e) throw a.e; return a.v; }));
+      const bad = args.find(a => a.e); if (bad) throw bad.e;
+      return f(args.map(a => a.v));
     }
-    if (t.v === '(') { const v = comparison(); expect(')'); return v; }
+    if (t.k === 'op' && t.v === '(') { const v = comparison(); expect(')'); return v; }
     err('#ERR');
   };
   const v = comparison(); if (p < toks.length) err('#ERR');
@@ -521,13 +634,16 @@ function tFill(el, src, g) {
     const vals = srcCells.map(([r, c]) => el.rows[r][c]);
     const nums = vals.map(v => (String(v).startsWith('=') ? null : autoNumber(v)));
     const allNum = nums.every(x => x != null);
+    const series = vals.some(v => String(v).startsWith('=')) ? null : fillSeries(vals);
     const step = allNum && nums.length >= 2 ? (nums[nums.length - 1] - nums[0]) / (nums.length - 1) : 0;
     const targets = vertical ? range(g.r0, g.r1).filter(r => r < src.r0 || r > src.r1).map(r => [r, L]) : range(g.c0, g.c1).filter(c => c < src.c0 || c > src.c1).map(c => [L, c]);
     for (const [r, c] of targets) {
       const off = vertical ? r - src.r0 : c - src.c0; const len = vals.length;
       const i = ((off % len) + len) % len; const srcV = vals[i]; const [sr, sc] = srcCells[i];
       let out;
-      if (String(srcV).startsWith('=')) out = '=' + shiftFormula(srcV.slice(1), r - sr, c - sc);
+      const sv = series ? series(off) : null;
+      if (sv != null) out = sv;
+      else if (String(srcV).startsWith('=')) out = '=' + shiftFormula(srcV.slice(1), r - sr, c - sc);
       else if (allNum && nums.length >= 2) { const k = vertical ? r - src.r1 : c - src.c1; const v = nums[nums.length - 1] + step * k; out = String(Math.round(v * 1e10) / 1e10); }
       else { const m = String(srcV).match(/^(.*?)(\d+)$/); if (m && nums.length === 1 && autoNumber(srcV) == null) { const k = vertical ? r - src.r1 : c - src.c1; out = m[1] + (+m[2] + k); } else out = srcV; }
       el.rows[r][c] = out;
@@ -536,6 +652,34 @@ function tFill(el, src, g) {
   }
   TBL.st.ar = g.r0; TBL.st.ac = g.c0; TBL.st.fr = g.r1; TBL.st.fc = g.c1;
   touch(el); tRebuild(el); commit();
+}
+// series for fill: Italian/English weekday & month names (cycling) and dates (+1 day, or the step between the first two)
+const FILL_LISTS = [
+  ['lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato', 'domenica'], ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'],
+  ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'],
+  ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'],
+  ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'], ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
+  ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'],
+  ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'],
+];
+function fillSeries(vals) {
+  const t = vals.map(v => String(v).trim());
+  if (t.some(x => x === '')) return null;
+  for (const L of FILL_LISTS) {
+    const idx = t.map(x => L.indexOf(x.toLowerCase()));
+    if (idx.some(i => i < 0)) continue;
+    const n = L.length, step = idx.length >= 2 ? (((idx[1] - idx[0]) % n) + n) % n || 1 : 1;
+    if (idx.some((i, k) => (((i - idx[0]) % n) + n) % n !== (step * k) % n)) return null;
+    const f = t[0], style = f === f.toUpperCase() && f.length > 1 ? 'up' : f[0] === f[0].toUpperCase() ? 'cap' : 'low';
+    return off => { const w = L[(((idx[0] + step * off) % n) + n) % n]; return style === 'up' ? w.toUpperCase() : style === 'cap' ? w[0].toUpperCase() + w.slice(1) : w; };
+  }
+  const D = t.map(x => { let m; if ((m = x.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return { k: 'it', s: Date.UTC(+m[3], +m[2] - 1, +m[1]) / 86400000, pad: m[1].length === 2 }; if ((m = x.match(/^(\d{4})-(\d{2})-(\d{2})$/))) return { k: 'iso', s: Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000 }; return null; });
+  if (D.some(x => !x || x.k !== D[0].k)) return null;
+  const step = D.length >= 2 ? (D[D.length - 1].s - D[0].s) / (D.length - 1) : 1;
+  return off => {
+    const d = new Date(Math.round(D[0].s + step * off) * 86400000); const p2 = x => String(x).padStart(2, '0');
+    return D[0].k === 'iso' ? `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}` : `${D[0].pad ? p2(d.getUTCDate()) : d.getUTCDate()}/${D[0].pad ? p2(d.getUTCMonth() + 1) : d.getUTCMonth() + 1}/${d.getUTCFullYear()}`;
+  };
 }
 const range = (a, b) => { const o = []; for (let i = a; i <= b; i++) o.push(i); return o; };
 
@@ -700,7 +844,8 @@ function tToolbar(ct) {
   const { r0, r1, c0, c1 } = TBL.rect();
   btn('<i style="font-family:Georgia,serif;font-size:16px">fx</i>', 'Formula', b => pop(b, m => {
     m.appendChild(h('div', 'mlabel', single ? 'Inserisci formula' : 'Formula sotto la selezione'));
-    FN_LIST.forEach(f => mi(m, `<code>${f}</code>`, () => {
+    m.style.maxHeight = 'min(70vh, 460px)'; m.style.overflowY = 'auto';
+    FN_GROUPS.forEach(([gname, names]) => { m.appendChild(h('div', 'mlabel', gname)); names.forEach(f => mi(m, `<code>${f}</code>`, () => {
       if (single) { tStartEdit(`=${f}(`); if (f === 'SUM') toast('Tocca la prima cella, poi l’ultima da sommare'); }
       else { // put result below each column (or right of row)
         const vertical = r1 > r0; const targetR = vertical ? r1 + 1 : r0; const targetC = vertical ? c0 : c1 + 1;
@@ -710,8 +855,8 @@ function tToolbar(ct) {
         else for (let r = r0; r <= r1; r++) el.rows[r][targetC] = `=${f}(${colName(c0)}${r + 1}:${colName(c1)}${r + 1})`;
         touch(el); tRebuild(el); commit();
       }
-    }));
-    m.appendChild(h('div', 'mi', '<span style="font-size:11px;color:#8a8f94;line-height:1.5">Scrivi “=” in una cella per una formula.<br>Es. =A1*B1, =SUM(A1:A10), =IF(A1>10,"sì","no")</span>'));
+    })); });
+    m.appendChild(h('div', 'mi', '<span style="font-size:11px;color:#8a8f94;line-height:1.5">Scrivi “=” in una cella per una formula.<br>Es. =A1*B1, =SUM(A1:A10), =IF(A1>10,"sì","no")<br>Anche in italiano: =SOMMA, =SE, =CERCA.VERT…</span>'));
   }));
   btn('<svg viewBox="0 0 24 24"><path d="M4 6h16M4 10h10M4 14h16M4 18h10"/></svg>', 'Allineamento', b => pop(b, m => {
     const r1_ = h('div', 'tfmt'); [['left', '⯇≡', 'Sinistra'], ['center', '≡', 'Centro'], ['right', '≡⯈', 'Destra']].forEach(([a, l, tt]) => { const x = h('button', (st.align || 'left') === a ? 'on' : '', l); x.title = tt; x.onclick = () => { tStyleSel({ align: a === 'left' ? null : a }); hidePopups(); }; r1_.appendChild(x); });
