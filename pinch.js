@@ -10,6 +10,9 @@
   const mid = t => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
 
   vp.addEventListener('touchstart', e => {
+    // un dito su una linea selezionata o su una maniglia: si trascina quella, la lavagna non deve scorrere.
+    // (sugli elementi SVG il browser ignora touch-action, quindi lo si ferma qui)
+    if (e.touches.length === 1 && e.target.closest?.('.line-svg.selected, .lh')) { e.preventDefault(); return; }
     if (e.touches.length !== 2 || typeof setZoom !== 'function') return;
     e.preventDefault();
     if (typeof drag !== 'undefined' && drag) drag = null; // il primo dito poteva aver iniziato a spostare una card

@@ -915,6 +915,8 @@ function elText(e) {
 
 /* ---------------------------- Pointer ----------------------------- */
 let drag = null;
+let lastPointerType = 'mouse'; // mouse, penna o dito: alcune azioni (es. doppio tocco) cambiano sul telefono
+addEventListener('pointerdown', e => { lastPointerType = e.pointerType || 'mouse'; }, true);
 const DRAG_THRESHOLD = 4;
 
 function onPointerDown(ev) {
@@ -1011,9 +1013,13 @@ function clickElement(id, ev, wasSelected) {
   }
 }
 
+// col dito il browser manda i movimenti all'elemento toccato all'inizio: se durante il trascinamento viene
+// ridisegnato (es. una linea) i movimenti si perdono. Si agganciano alla lavagna, che resta sempre.
+function holdTouch(ev) { if (ev && ev.pointerType === 'touch') { try { VP().setPointerCapture(ev.pointerId); } catch { } } }
 function beginMove() {
   const ids = [...sel].filter(id => E(id) && !E(id).locked);
   if (!ids.length) { drag = null; return; }
+  holdTouch(drag.ev);
   document.body.classList.add('dragging');
   // take children out of columns (keep visual position), skip children whose column is also dragged
   const draggedCols = new Set(ids.filter(id => E(id).type === 'column'));
@@ -1113,7 +1119,7 @@ function refreshSel() {
   updateLines(); updateCtxToolbar();
 }
 
-function startResize(ev, id) {
+function startResize(ev, id) { holdTouch(ev);
   const el = E(id); if (el.locked) return;
   sel.clear(); sel.add(id); refreshSel();
   drag = { kind: 'resize', id, start: toWorld(ev.clientX, ev.clientY), w0: nodes.get(id).offsetWidth };
@@ -1125,7 +1131,7 @@ function resizeMove(p) {
   nodes.get(el.id).style.width = el.w + 'px'; updateLines();
 }
 
-function startLineHandle(ev, id, k) { drag = { kind: 'lineh', id, k, start: toWorld(ev.clientX, ev.clientY) }; document.body.classList.add('dragging'); }
+function startLineHandle(ev, id, k) { holdTouch(ev); drag = { kind: 'lineh', id, k, start: toWorld(ev.clientX, ev.clientY) }; document.body.classList.add('dragging'); }
 function lineHandleMove(ev, p) {
   const el = E(drag.id);
   $$('.attach-hover').forEach(x => x.classList.remove('attach-hover'));
@@ -1907,6 +1913,8 @@ async function init() {
     const n = ev.target.closest('.el');
     if (n) { const el = E(n.dataset.id); if (el?.type === 'image' && ev.target.tagName === 'IMG' || el?.type === 'image' && !ev.target.closest('.caption')) openLightbox(el); if (el?.type === 'link' && el.url && !ev.target.closest('.link-title')) window.open(el.url, '_blank', 'noopener'); return; }
     if (ev.target.closest('.line-svg, .lh')) return;
+    // sul telefono il doppio tocco capita per sbaglio scorrendo: lì le note si creano solo dalla barra degli strumenti
+    if (lastPointerType === 'touch') return;
     const p = toWorld(ev.clientX, ev.clientY); addElement('note', { x: Math.max(0, p.x - 20), y: Math.max(0, p.y - 20) });
   });
   VP().addEventListener('contextmenu', ev => {

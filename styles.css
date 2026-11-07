@@ -808,3 +808,12 @@ body.dark .acc-form input:not([type=checkbox]), body.dark .acc-form select, body
 
 /* lo zoom con due dita è della lavagna (pinch.js), non della pagina */
 html, body { touch-action: pan-x pan-y; }
+
+/* linee sul telefono: le maniglie e la linea selezionata si trascinano col dito (non fanno scorrere la lavagna),
+   e le maniglie sono abbastanza grandi per un dito */
+.lh, .line-svg.selected, .line-svg.selected .hit { touch-action: none; }
+@media (pointer: coarse) {
+  .lh { width: 24px; height: 24px; margin: -12px 0 0 -12px; border-width: 3px; }
+  .lh.mid { width: 20px; height: 20px; margin: -10px 0 0 -10px; }
+  .line-svg .hit { stroke-width: 32; }
+}
