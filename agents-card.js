@@ -103,6 +103,12 @@
       this.save(s); notify();
       return 'C' + n;
     },
+    async createTask(t) {
+      const s = this.state(); const n = s.nextId++;
+      const c = { id: 'C' + n, n, project: t.project || null, title: t.title, body: t.body || '', status: 'todo', priority: t.priority || 'normal', labels: [], dependsOn: [], needsApproval: !!t.needsApproval,
+        assignee: t.assignee || null, createdBy: PROFILE?.name || 'tu', createdByRole: 'human', claimedBy: null, claimedSession: null, claimActive: false, approvedBy: null, version: 1, updatedAt: new Date().toISOString(), comments: [] };
+      s.cards.push(c); this.save(s); notify(); return c;
+    },
     reset() { ls.set(DEMO_KEY, null); notify(); },
     connect() { },
   };
@@ -281,6 +287,7 @@
     const who = c.claimActive && c.claimedBy ? c.claimedBy + (c.claimedSession ? ` · ${c.claimedSession}` : '') : c.createdBy;
     const isAgent = c.claimActive ? true : c.createdByRole === 'agent';
     meta.append(mk('span', `agx-who ${isAgent ? 'agent' : 'human'}`, `${isAgent ? '🤖' : '👤'} ${who}`));
+    if (c.assignee) meta.append(mk('span', 'agx-tag assignee', `per ${c.assignee}`));
     if (el.project === '*') meta.append(mk('span', 'agx-tag', c.project || 'senza progetto'));
     if (c.priority === 'high') meta.append(mk('span', 'agx-tag high', 'alta'));
     meta.append(mk('span', '', when(c.updatedAt)));
@@ -321,6 +328,65 @@
   async function act(fn, ok, refresh) {
     try { await fn(); toast(ok); } catch (e) { toast(e.status === 409 ? 'La card è cambiata nel frattempo: ricarico' : e.message); }
     cache = null; refresh();
+  }
+
+  /* ------------------------------ Compito per un agente (menu •••) ------------------------------ */
+  // La persona scrive il compito sulla lavagna e sceglie progetto e agente: solo quell'agente potrà
+  // prenderlo. L'agente lo trova alla sua prossima sessione (board_overview mostra i compiti assegnati).
+  async function openTaskForm(at) {
+    const src = await ready;
+    if (src.kind === 'server' && !src.hasToken()) return toast('Prima collega lo spazio agenti con la tua chiave (riquadro Agenti o Accessi)');
+    let agents = ['claude-code', 'codex'], projects = [];
+    try {
+      const d = await src.data('*'); projects = d.projects.map(p => p.name).filter(Boolean);
+      if (src.kind === 'server' && typeof Access !== 'undefined') agents = (await Access.agents()).filter(a => a.perms.work).map(a => ({ name: a.name, projects: a.perms.projects }));
+      else agents = agents.map(name => ({ name, projects: ['*'] }));
+    } catch (e) { return toast(e.message); }
+    const here = S.boards[cur]?.agentProject; // dentro la board di un progetto: quello è il progetto proposto
+    const ov = mk('div', 'acc-modal'); const box = mk('form', 'acc-box acc-form');
+    const head = mk('div', 'acc-head'); head.append(mk('h2', '', 'Compito per un agente'));
+    const x = mk('button', 'acc-x', '✕'); x.type = 'button'; x.onclick = () => ov.remove(); head.append(x); box.append(head);
+    const field = (label, input) => { const l = mk('label', '', label); l.append(input); box.append(l); return input; };
+    const title = field('Cosa deve fare', mk('input')); title.required = true; title.maxLength = 200; title.placeholder = 'es. Controlla i certificati TLS in scadenza';
+    const body = field('Dettagli (facoltativo)', mk('textarea')); body.rows = 4; body.placeholder = 'Vincoli, cosa NON fare, cosa riportare…';
+    const projIn = field('Progetto', mk('input')); projIn.setAttribute('list', 'agx-projects'); projIn.value = here || projects[0] || ''; projIn.placeholder = 'es. proxmox'; projIn.autocapitalize = 'off';
+    const dl = mk('datalist'); dl.id = 'agx-projects'; for (const p of projects) { const o = mk('option'); o.value = p; dl.append(o); } box.append(dl);
+    const who = field('Assegna a', mk('select'));
+    const fillWho = () => {
+      const p = projIn.value.trim().toLowerCase(), prev = who.value; who.replaceChildren();
+      const any = mk('option', '', 'Qualsiasi agente con accesso'); any.value = ''; who.append(any);
+      for (const a of agents) { const ok = a.projects.includes('*') || a.projects.includes(p || '-'); const o = mk('option', '', ok ? a.name : `${a.name} (non ha accesso a questo progetto)`); o.value = a.name; o.disabled = !ok; who.append(o); }
+      if ([...who.options].some(o => o.value === prev && !o.disabled)) who.value = prev;
+    };
+    projIn.addEventListener('input', fillWho); fillWho();
+    const pri = field('Priorità', mk('select')); for (const [v, t] of [['normal', 'Normale'], ['high', 'Alta'], ['low', 'Bassa']]) { const o = mk('option', '', t); o.value = v; pri.append(o); }
+    const al = mk('label', 'acc-check'); const appr = mk('input'); appr.type = 'checkbox'; appr.checked = true; al.append(appr, ' Prima di chiuderlo serve la mia approvazione'); box.append(al);
+    box.append(mk('p', 'acc-muted', 'L\'agente lo troverà alla sua prossima sessione: le istruzioni gli dicono di guardare prima i compiti assegnati.'));
+    const err = mk('p', 'acc-err'); const row = mk('div', 'acc-actions'); const go = mk('button', 'acc-btn primary', 'Assegna'); go.type = 'submit'; row.append(go); box.append(err, row);
+    box.addEventListener('keydown', e => e.stopPropagation());
+    box.onsubmit = async e => {
+      e.preventDefault(); err.textContent = ''; go.disabled = true;
+      const t = { title: title.value.trim(), body: body.value, project: projIn.value.trim().toLowerCase() || null, assignee: who.value || null, priority: pri.value, needsApproval: appr.checked };
+      try {
+        if (src.kind === 'server') {
+          const c = await server.call('POST', '/api/board/cards', t);
+          ov.remove(); cache = null; notify();
+          const bid = 'p-' + (c.project ? c.project.replace(/[^A-Za-z0-9_-]/g, '_') : 'none');
+          toast(`Compito ${c.id} creato${c.assignee ? ` per ${c.assignee}` : ''} nella board «${c.project || 'senza progetto'}»`, cur !== bid ? 'Apri' : null, () => { if (S.boards[bid]) openBoard(bid); });
+        } else {
+          const c = await demo.createTask(t);
+          makeEl('agentcard', at?.x ?? 40, at?.y ?? 40, { cardId: c.id }); render(); commit();
+          ov.remove(); toast(`Compito ${c.id} creato${c.assignee ? ` per ${c.assignee}` : ''} (esempio: nessun agente vero lo eseguirà)`);
+        }
+      } catch (x) { err.textContent = x.message; go.disabled = false; }
+    };
+    ov.append(box); document.body.append(ov); ov.addEventListener('pointerdown', e => { if (e.target === ov) ov.remove(); });
+    title.focus();
+  }
+  // la voce "Compito agente" del menu ••• non crea un elemento: apre il modulo
+  if (typeof addElement === 'function') {
+    const orig = addElement;
+    addElement = function (type, at, opts) { if (type === 'agenttask') return void openTaskForm(at); return orig.apply(this, arguments); };
   }
 
   function loginForm(refresh) {

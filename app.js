@@ -938,6 +938,9 @@ function onPointerDown(ev) {
     if (!el) return;
     const interactive = t.closest('.no-drag, input, textarea, button, a, audio, video, iframe, select, [contenteditable="true"], [contenteditable="plaintext-only"]');
     if (interactive) { if (!sel.has(id) || sel.size > 1) { sel.clear(); sel.add(id); refreshSel(); } return; }
+    // telefono: un dito su una card NON selezionata fa scorrere la lavagna (ci pensa il browser) e un tocco
+    // la seleziona; solo una card già selezionata si sposta col dito. Prima ogni card bloccava lo scorrimento.
+    if (ev.pointerType === 'touch' && !sel.has(id) && !ev.shiftKey) { drag = { kind: 'pending', id, start: toWorld(ev.clientX, ev.clientY), cx: ev.clientX, cy: ev.clientY, wasSelected: false, ev, touchTap: true }; return; }
     ev.preventDefault();
     if (editing && editing.id !== id) blurEditing();
     if (editing && editing.id === id) return;
@@ -967,6 +970,7 @@ function onPointerMove(ev) {
   const p = toWorld(ev.clientX, ev.clientY);
   if (drag.kind === 'pending') {
     if (Math.hypot(ev.clientX - drag.cx, ev.clientY - drag.cy) < DRAG_THRESHOLD) return;
+    if (drag.touchTap) { drag.moved = true; return; } // era uno scorrimento, non un tocco: la card resta dov'è
     beginMove(); return;
   }
   if (drag.kind === 'move') return moveSel(ev, p);
@@ -983,7 +987,10 @@ function onPointerUp(ev) {
   if (!drag) return;
   const d = drag; drag = null;
   document.body.classList.remove('dragging');
-  if (d.kind === 'pending') return clickElement(d.id, d.ev, d.wasSelected);
+  if (d.kind === 'pending') {
+    if (d.touchTap) { if (d.moved) return; blurEditing(); sel.clear(); sel.add(d.id); refreshSel(); } // tocco semplice: seleziona
+    return clickElement(d.id, d.ev, d.wasSelected);
+  }
   if (d.kind === 'move') return endMove(ev);
   if (d.kind === 'marquee') { $('#marquee')?.remove(); updateCtxToolbar(); return; }
   if (d.kind === 'resize') { commit(); updateStageSize(); return; }

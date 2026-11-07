@@ -746,7 +746,7 @@ function toolDragEnd(ev) {
   const td = toolDrag; toolDrag = null;
   td.ghost?.remove(); document.body.classList.remove('dragging'); $$('.col-ph').forEach(x => x.remove());
   $('#unsorted-panel')?.classList.remove('hot');
-  if (!td.moved) { if (td.pointerType === 'touch') return addElement(td.type); if (td.type === 'draw') return toggleDraw(); if (td.type === 'image' || td.type === 'file') return addElement(td.type); return dragMeTip(ev); }
+  if (!td.moved) { if (td.pointerType === 'touch' || td.type === 'agenttask') return addElement(td.type); if (td.type === 'draw') return toggleDraw(); /* "Compito agente" apre un modulo: basta un clic */ if (td.type === 'image' || td.type === 'file') return addElement(td.type); return dragMeTip(ev); }
   const up = $('#unsorted-panel'); const ur = up && !up.classList.contains('hidden') ? up.getBoundingClientRect() : null;
   const r = VP().getBoundingClientRect();
   if (ur && ev.clientX >= ur.left) { const el = addElement(td.type, { x: 0, y: 0 }); if (el) moveToUnsorted([el.id]); return; }
@@ -1442,7 +1442,7 @@ function settingsPop() {
   headerPop($('#btn-settings'), m => {
     m.style.padding = '0';
     const n = Object.values(S.elements).filter(e => !e.deleted).length;
-    m.innerHTML = `<div class="profile"><div style="flex:1;min-width:0"><div class="pn editable" contenteditable="plaintext-only"></div><small>Account locale su questo Mac</small><small style="display:block;margin-top:2px;opacity:.7">Versione: ${esc(APP_VERSION)}</small><div style="margin-top:8px;display:flex;gap:12px;font-size:12px"><a href="#" data-a="settings" style="color:var(--accent)">Impostazioni</a><a href="#" data-a="dark" style="color:var(--accent)">${document.body.classList.contains('dark') ? 'Modalità chiara' : 'Modalità scura'}</a></div></div><div style="text-align:center"><div class="big-av"></div><small style="cursor:pointer" data-a="av">Cambia</small></div></div><div style="border-top:1px solid #eceef0;padding:14px 18px 16px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">Spazio illimitato</div><div style="height:6px;background:#eceef0;border-radius:3px"><div style="width:100%;height:100%;background:#4eb85a;border-radius:3px"></div></div><small style="color:var(--muted);display:block;margin-top:6px">${n} elementi · nessun limite in locale</small></div>`;
+    m.innerHTML = `<div class="profile"><div style="flex:1;min-width:0"><div class="pn editable" contenteditable="plaintext-only"></div><small>Account locale su questo Mac</small><small style="display:block;margin-top:2px;opacity:.7">Versione: ${esc(APP_VERSION)}</small><div style="margin-top:8px;display:flex;gap:12px;font-size:12px"><a href="#" data-a="settings" style="color:var(--accent)">Impostazioni</a><a href="#" data-a="access" style="color:var(--accent)">Accessi</a><a href="#" data-a="dark" style="color:var(--accent)">${document.body.classList.contains('dark') ? 'Modalità chiara' : 'Modalità scura'}</a></div></div><div style="text-align:center"><div class="big-av"></div><small style="cursor:pointer" data-a="av">Cambia</small></div></div><div style="border-top:1px solid #eceef0;padding:14px 18px 16px"><div style="font-size:13px;font-weight:600;margin-bottom:8px">Spazio illimitato</div><div style="height:6px;background:#eceef0;border-radius:3px"><div style="width:100%;height:100%;background:#4eb85a;border-radius:3px"></div></div><small style="color:var(--muted);display:block;margin-top:6px">${n} elementi · nessun limite in locale</small></div>`;
     const pn = $('.pn', m); pn.textContent = PROFILE.name;
     pn.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); pn.blur(); } };
     pn.onblur = () => { PROFILE.name = pn.textContent.trim() || 'Tu'; saveProfile(); };
@@ -1450,6 +1450,8 @@ function settingsPop() {
     const pickAv = () => pickFiles('image/*', false, f => { const r = new FileReader(); r.onload = () => { const img = new Image(); img.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 96; const x = c.getContext('2d'); const s = Math.min(img.width, img.height); x.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 96, 96); PROFILE.avatar = c.toDataURL('image/jpeg', .85); saveProfile(); closePops(); settingsPop(); }; img.src = r.result; }; r.readAsDataURL(f[0]); });
     av.onclick = pickAv; $('[data-a="av"]', m).onclick = pickAv;
     $('[data-a="settings"]', m).onclick = e => { e.preventDefault(); closePops(); openPanel('settings'); };
+    const ax = $('[data-a="access"]', m); // Accessi: solo con il server e con una chiave da persona
+    if (typeof Access !== 'undefined' && Access.available()) ax.onclick = e => { e.preventDefault(); closePops(); Access.open(); }; else ax.remove();
     $('[data-a="dark"]', m).onclick = e => { e.preventDefault(); toggleDark(); closePops(); };
   }, 330);
 }

@@ -643,10 +643,10 @@ body.dark .crumb:hover, body.dark .ico:hover, body.dark .hbtn:hover { background
 
   #viewport { top: 96px; bottom: calc(70px + env(safe-area-inset-bottom)); left: 0; right: 0; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   body.home-board #viewport { top: 56px; }
-  .el { touch-action: none; }
+  .el.selected { touch-action: none; } /* le card non selezionate lasciano scorrere la lavagna col dito */
   .el .editable, .el input, .el textarea, .el button, .el a, .el iframe, .el audio, .el video { touch-action: manipulation; }
   .el-column .col-body { touch-action: pan-y; }
-  .el-table .tbl-wrap { touch-action: none; }
+  .el-table.selected .tbl-wrap { touch-action: none; }
   #unsorted-btn { display: none; }
   #unsorted-panel { top: 96px; bottom: calc(70px + env(safe-area-inset-bottom)); width: min(100vw, 360px); }
   body.home-board #unsorted-panel { top: 56px; }
@@ -762,3 +762,46 @@ body.dark .sync-box { background: #262b34; }
 .el-agentcard:has(.agc-st-review) > .card { box-shadow: 0 0 0 2px #f3dfbf, var(--card-shadow); }
 .agent-by { font-size: 11px; font-weight: 600; color: #6b4fd8; background: #f1edfd; padding: 6px 24px; border-bottom: 1px solid rgba(107,79,216,.12); }
 body.dark .agent-by { background: rgba(107,79,216,.18); color: #c9bbff; }
+
+/* ------------------------------ Accessi e compiti per gli agenti ------------------------------ */
+.acc-modal { position: fixed; inset: 0; z-index: 210; background: rgba(27,37,54,.35); display: grid; place-items: center; padding: 16px; }
+.acc-box { background: #fff; color: var(--ink); border-radius: 14px; width: min(620px, 100%); max-height: calc(100vh - 32px); overflow: auto; box-shadow: 0 20px 50px rgba(27,37,54,.25); padding: 0 0 18px; }
+.acc-head { position: sticky; top: 0; background: inherit; display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 10px; z-index: 1; }
+.acc-head h2 { margin: 0; font: 600 20px var(--serif); }
+.acc-x { border: 0; background: none; font-size: 16px; color: var(--muted); padding: 4px 8px; }
+.acc-body, .acc-form { display: grid; gap: 10px; padding: 0 20px; font-size: 13px; }
+form.acc-box.acc-form { padding: 0 0 18px; }
+form.acc-box.acc-form > :not(.acc-head) { margin: 0 20px; }
+.acc-muted { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.acc-warn { margin: 0; color: #8a5a00; background: #fff4e5; border-radius: 8px; padding: 8px 10px; font-weight: 600; font-size: 12px; }
+.acc-err { margin: 0; color: #d93a2f; font-size: 12px; min-height: 1em; }
+.acc-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.acc-actions.small { justify-content: flex-start; }
+.acc-btn { border: 0; border-radius: 8px; padding: 7px 12px; background: #f0f1f3; color: var(--ink); font: 600 12px var(--sans); cursor: pointer; }
+.acc-btn.primary { background: var(--ink); color: #fff; }
+.acc-btn.danger { background: #fdecea; color: #d93a2f; }
+.acc-btn:disabled { opacity: .5; }
+.acc-row { border: 1px solid #eceef0; border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+.acc-row.off { opacity: .55; }
+.acc-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; }
+.acc-tag { font-size: 11px; font-weight: 600; border-radius: 10px; padding: 1px 7px; background: #f0f1f3; color: var(--ink2); }
+.acc-tag.green { background: #e7f6eb; color: #2e9b48; }
+.acc-tag.red { background: #fdecea; color: #d93a2f; }
+.acc-sum { font-size: 12px; line-height: 1.45; }
+.acc-meta { font-size: 11px; color: var(--muted); }
+.acc-form label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink2); }
+.acc-form input:not([type=checkbox]), .acc-form select, .acc-form textarea { padding: 8px 10px; border: 1px solid #dfe1e4; border-radius: 8px; font: 13px var(--sans); color: var(--ink); background: #fff; width: 100%; user-select: text; }
+.acc-label { font-size: 12px; font-weight: 600; color: var(--ink2); margin-top: 4px; }
+.acc-projects { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.acc-projects .acc-other { flex-basis: 100%; }
+.acc-check { display: flex !important; flex-direction: row; align-items: center; gap: 6px; font-weight: 500 !important; color: var(--ink) !important; }
+.acc-check.big { align-items: flex-start; }
+.acc-check.big span { display: grid; gap: 1px; }
+.acc-check.big small { color: var(--muted); font-weight: 400; }
+.acc-copy { display: grid; gap: 6px; }
+.acc-copy pre { margin: 0; white-space: pre-wrap; word-break: break-all; font: 12px/1.45 var(--mono); background: #f5f6f7; border-radius: 8px; padding: 8px 10px; user-select: all; }
+.acc-copy .acc-btn { justify-self: start; }
+.agx-tag.assignee { background: #e9effe; color: #2f63f7; font-weight: 600; }
+body.dark .acc-box { background: #262b34; }
+body.dark .acc-copy pre, body.dark .acc-btn { background: rgba(255,255,255,.07); }
+body.dark .acc-form input:not([type=checkbox]), body.dark .acc-form select, body.dark .acc-form textarea { background: #1d2129; }
