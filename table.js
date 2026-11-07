@@ -885,7 +885,8 @@ function tCellMenu(m) {
 }
 function tSort(dir) {
   const el = E(TBL.st.id); const { r0, r1, c0 } = TBL.rect();
-  const start = r0 === r1 ? (getSt(el, 0, c0).bold ? 1 : 0) : r0; const end = r0 === r1 ? el.rows.length - 1 : r1;
+  // la riga di intestazione (headerRow) non viene mai ordinata insieme ai dati
+  const from = r0 === r1 ? 0 : r0; const start = el.headerRow && from === 0 ? 1 : from; const end = r0 === r1 ? el.rows.length - 1 : r1;
   const idx = range(start, end);
   const key = r => { const v = cellValue(el, r, c0); return v && v.error ? '' : v; };
   idx.sort((a, b) => { const x = key(a), y = key(b); if (x === '' && y !== '') return 1; if (y === '' && x !== '') return -1; return (isNum(x) && isNum(y) ? x - y : String(x).localeCompare(String(y), 'it', { numeric: true })) * dir; });

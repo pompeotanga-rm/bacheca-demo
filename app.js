@@ -52,7 +52,21 @@ async function fileURL(id) {
   const b = await DB.get('files', id); if (!b) return '';
   const u = URL.createObjectURL(b); urlCache.set(id, u); return u;
 }
-async function storeFile(blob) { const id = uid(); await DB.put('files', id, blob); return id; }
+// elimina i file che nessun elemento o board usa più (la cronologia di annullamento
+// non sopravvive al ricaricamento, quindi all'avvio non possono più servire)
+async function cleanupFiles() {
+  try {
+    const used = new Set();
+    for (const e of Object.values(S.elements)) if (e.fileId) used.add(e.fileId);
+    for (const b of Object.values(S.boards)) if (b.iconImg) used.add(b.iconImg);
+    for (const k of await DB.keys('files')) if (!used.has(k)) await DB.del('files', k);
+  } catch (e) { console.error('Pulizia dei file non riuscita', e); }
+}
+async function storeFile(blob) {
+  const id = uid();
+  try { await DB.put('files', id, blob); } catch (e) { toast('Impossibile salvare il file: lo spazio del browser potrebbe essere esaurito'); throw e; }
+  return id;
+}
 
 /* ----------------------------- State ----------------------------- */
 let S = null;          // { boards, elements, labels, seq }
@@ -66,7 +80,7 @@ function freshState() {
   const now = Date.now();
   return { boards: { home: { id: 'home', title: 'Home', parent: null, color: '#2f3337', created: now } }, elements: {}, labels: {}, seq: 1 };
 }
-function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(() => DB.put('kv', 'state', S), 250); }
+function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(() => DB.put('kv', 'state', S).catch(e => console.error('Salvataggio non riuscito', e)), 250); } // sostituita da features.js
 function commit() {
   scheduleSave();
   const snap = JSON.stringify(S);
@@ -572,7 +586,7 @@ function renderChrome() {
 function openBoard(id, focusId) {
   if (!S.boards[id] || isBoardHidden(id)) id = 'home';
   blurEditing(); hidePopups();
-  S.boards[cur].scroll = { x: VP().scrollLeft, y: VP().scrollTop, z: zoom };
+  if (S.boards[cur]) S.boards[cur].scroll = { x: VP().scrollLeft, y: VP().scrollTop, z: zoom }; // dopo un import o "Cancella tutto" la board corrente può non esistere più
   cur = id; sel.clear();
   if (location.hash !== '#/' + id) history.pushState(null, '', '#/' + id);
   const sc = S.boards[id].scroll; zoom = sc?.z || 1; $('#zoom-val').textContent = Math.round(zoom * 100) + '%';
@@ -704,7 +718,7 @@ async function addFiles(files, at) {
   let { x, y } = at; const ids = [];
   for (const f of files) {
     if (/\.(csv|tsv|xlsx)$/i.test(f.name)) {
-      try { const rows = await fileToTable(f); if (rows && rows.length) { const el = makeEl('table', x, y, { rows, colW: Array(rows[0].length).fill(120), header: false, cardTitle: f.name.replace(/\.[^.]+$/, '') }); ids.push(el.id); x += 30; y += 30; continue; } }
+      try { const rows = await fileToTable(f); if (rows && rows.length) { const el = makeEl('table', x, y, { rows, colW: Array(rows[0].length).fill(120), headerRow: true, cardTitle: f.name.replace(/\.[^.]+$/, '') }); ids.push(el.id); x += 30; y += 30; continue; } }
       catch (err) { toast('Impossibile leggere ' + f.name + ' come tabella: lo aggiungo come file'); }
     }
     const fileId = await storeFile(f);
@@ -751,7 +765,9 @@ function purgeElement(id) {
     const stack = [el.target];
     while (stack.length) { const b = stack.pop(); for (const e of Object.values(S.elements)) if (e.board === b) { kill.push(e.id); if (e.type === 'board') stack.push(e.target); } delete S.boards[b]; }
   }
-  for (const k of kill) { const e = E(k); if (e?.fileId && !Object.values(S.elements).some(o => o.id !== k && o.fileId === e.fileId)) DB.del('files', e.fileId); delete S.elements[k]; }
+  // i file NON si cancellano qui: con ⌘Z l'elemento può tornare e deve ritrovare il suo file.
+  // I file non più usati da nessun elemento vengono eliminati al prossimo avvio (cleanupFiles).
+  for (const k of kill) delete S.elements[k];
   commit(); updateTrashBadge();
 }
 function duplicate(ids, offset = 24) {
@@ -1496,7 +1512,7 @@ function openPanel(kind) {
     let armed = false;
     const rr = row('Cancella tutto', 'Elimina definitivamente tutte le board e i file', 'Cancella', async () => {
       if (!armed) { armed = true; $('button', rr).textContent = 'Conferma'; return; }
-      S = freshState(); const ks = await DB.keys('files'); for (const k of ks) await DB.del('files', k); hist.stack = []; hist.idx = -1; commit(); openBoard('home'); closePanel();
+      S = freshState(); cur = 'home'; const ks = await DB.keys('files'); for (const k of ks) await DB.del('files', k); urlCache.clear(); hist.stack = []; hist.idx = -1; commit(); openBoard('home'); closePanel();
     }, 'danger');
     p.appendChild(b);
   }
@@ -1642,12 +1658,24 @@ async function exportAll() {
   for (const k of await DB.keys('files')) { const b = await DB.get('files', k); files[k] = { type: b.type, data: await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); }) }; }
   saveBlob(new Blob([JSON.stringify({ app: 'bacheca', v: 1, state: S, files })], { type: 'application/json' }), `bacheca-backup-${new Date().toISOString().slice(0, 10)}.json`);
 }
+function validBackup(data) {
+  const st = data && data.app === 'bacheca' && data.state;
+  if (!st || typeof st.boards !== 'object' || !st.boards || !st.boards.home) return false;
+  if (typeof st.elements !== 'object' || !st.elements) return false;
+  return Object.values(st.elements).every(e => e && typeof e.id === 'string' && typeof e.type === 'string' && typeof e.board === 'string')
+    && Object.values(data.files || {}).every(v => v && typeof v.data === 'string' && v.data.startsWith('data:'));
+}
 async function importAll(f) {
+  // 1. si controlla tutto prima di toccare i dati attuali
+  let data;
+  try { data = JSON.parse(await f.text()); } catch { data = null; }
+  if (!validBackup(data)) return toast('File di backup non valido: i dati attuali non sono stati modificati');
+  // 2. si caricano i file; 3. solo alla fine si sostituisce lo stato
   try {
-    const data = JSON.parse(await f.text()); if (data.app !== 'bacheca' || !data.state?.boards) throw new Error('formato');
     for (const [k, v] of Object.entries(data.files || {})) { const bl = await (await fetch(v.data)).blob(); await DB.put('files', k, bl); }
-    S = data.state; urlCache.clear(); hist.stack = []; hist.idx = -1; commit(); closePanel(); openBoard('home'); toast('Backup importato');
-  } catch (e) { toast('File di backup non valido'); }
+  } catch (e) { console.error(e); return toast('Impossibile importare i file del backup: i dati attuali non sono stati modificati'); }
+  S = data.state; if (!S.labels) S.labels = {};
+  cur = 'home'; urlCache.clear(); hist.stack = []; hist.idx = -1; commit(); closePanel(); openBoard('home'); toast('Backup importato');
 }
 
 /* ----------------------------- Zoom ------------------------------- */
@@ -1771,6 +1799,7 @@ async function init() {
   await DB.open();
   S = (await DB.get('kv', 'state')) || seedState();
   if (!S.labels) S.labels = {};
+  await cleanupFiles(); // prima di attivare l'interfaccia: nessun file nuovo può arrivare nel frattempo
   const fromHash = location.hash.replace('#/', '');
   cur = S.boards[fromHash] ? fromHash : 'home';
   commit();
@@ -1836,7 +1865,9 @@ async function init() {
   addEventListener('copy', e => { if (TBL.st && !TBL.st.editing) { e.preventDefault(); tCopy(false); return; } if (!isTyping() && sel.size) { copySel(false); e.preventDefault(); } });
   addEventListener('resize', () => { updateStageSize(); positionFormatBar(); });
   addEventListener('popstate', () => { const id = location.hash.replace('#/', '') || 'home'; if (id !== cur) openBoard(S.boards[id] ? id : 'home'); });
-  addEventListener('beforeunload', () => { clearTimeout(saveTimer); if (S) DB.put('kv', 'state', S); });
+  addEventListener('beforeunload', () => { clearTimeout(saveTimer); if (S) DB.put('kv', 'state', S).catch(() => { }); });
+  // sul telefono la pagina può essere chiusa senza beforeunload: si salva appena va in secondo piano
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && saveTimer && S) (typeof saveNow === 'function' ? saveNow() : DB.put('kv', 'state', S)); });
   document.addEventListener('selectionchange', () => { if (editing) positionFormatBar(); });
 
   history.replaceState(null, '', '#/' + cur);

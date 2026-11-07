@@ -155,10 +155,19 @@ function popAt(anchor, build, opts = {}) {
 function closePops() { $$('.pop').forEach(p => p.remove()); $$('.dt-pop').forEach(p => p.remove()); }
 
 /* ----------------------------- Salvataggio ----------------------------- */
-function setSave(state) { const s = $('#save-status'); if (!s) return; s.textContent = state === 'saving' ? 'Salvataggio…' : 'Salvato'; clearTimeout(setSave.t); if (state === 'saved') setSave.t = setTimeout(() => { s.textContent = ''; }, 4000); }
+function setSave(state) { const s = $('#save-status'); if (!s) return; s.textContent = state === 'saving' ? 'Salvataggio…' : state === 'error' ? '⚠ Non salvato' : 'Salvato'; s.classList.toggle('save-err', state === 'error'); clearTimeout(setSave.t); if (state === 'saved') setSave.t = setTimeout(() => { s.textContent = ''; }, 4000); }
 function scheduleSave() {
   clearTimeout(saveTimer); setSave('saving');
-  saveTimer = setTimeout(() => DB.put('kv', 'state', S).then(() => setSave('saved')), 300);
+  saveTimer = setTimeout(saveNow, 300);
+}
+// salvataggio con gestione degli errori: se il browser rifiuta (spazio esaurito, archivio bloccato)
+// lo si dice chiaramente invece di far credere che sia tutto salvato
+function saveNow() {
+  clearTimeout(saveTimer); saveTimer = null;
+  return DB.put('kv', 'state', S).then(() => { saveNow.failed = false; setSave('saved'); }, e => {
+    console.error('Salvataggio non riuscito', e); setSave('error');
+    if (!saveNow.failed) { saveNow.failed = true; toast('Salvataggio non riuscito: lo spazio del browser potrebbe essere esaurito. Esporta un backup dalle impostazioni.'); }
+  });
 }
 
 /* ------------------------------ Decorazioni ------------------------------ */
@@ -1632,3 +1641,7 @@ function initFeatures() {
   setTimeout(() => maybeTemplateChooser(cur), 400);
 }
 let lastDragIds = null;
+
+/* ------------------------------ Spazio agenti ------------------------------ */
+// il collegamento compare solo se il server con lo spazio agenti è attivo (non nella demo statica)
+fetch('/api/board/health', { cache: 'no-store' }).then(r => r.ok && r.json()).then(j => { if (j && j.ok) document.getElementById('btn-agents')?.removeAttribute('hidden'); }).catch(() => { });

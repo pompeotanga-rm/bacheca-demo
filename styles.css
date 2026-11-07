@@ -679,3 +679,5 @@ body.dark .crumb:hover, body.dark .ico:hover, body.dark .hbtn:hover { background
   .tpl-panel { right: 8px; bottom: calc(78px + env(safe-area-inset-bottom)); width: min(260px, calc(100vw - 16px)); }
   #toast { bottom: calc(78px + env(safe-area-inset-bottom)); max-width: calc(100vw - 16px); }
 }
+.ico[hidden] { display: none; }
+#save-status.save-err { color: #d93a2f; font-weight: 600; }
