@@ -127,10 +127,24 @@
   // esistenti (che non vengono toccate), così l'esempio si vede subito senza cercarlo nei menu.
   const DEMO_BOARD_KEY = 'bacheca-demo-board-v1';
   const DEMO_BOARD_KEY2 = 'bacheca-demo-board-v2'; // seconda parte: le card degli agenti come elementi della lavagna
-  // terza parte: lo schema dell'architettura disegnato davvero da Claude Code (permesso lavagna "solo i propri
-  // elementi"), copiato così com'era: posizioni, colonne, frecce con etichetta e firme
-  const DEMO_BOARD_KEY3 = 'bacheca-demo-board-v3';
-  const DEMO_SCHEMA = [{"id": "ag-5942aec4d3c4", "type": "column", "x": 40, "y": 100, "w": 290, "title": "Browser", "items": ["ag-b7cdb85e2007"], "agentAuthor": "claude-code", "agentSession": "f997", "collapsed": false}, {"id": "ag-35ab6555ce7d", "type": "column", "x": 400, "y": 100, "w": 290, "title": "Server", "items": ["ag-dcfa62fd9b03", "ag-a13bd967c8ba", "ag-5ed26413b65c"], "agentAuthor": "claude-code", "agentSession": "f997", "collapsed": false}, {"id": "ag-dd7ee238b5ff", "type": "heading", "x": 40, "y": 20, "w": 900, "html": "Architettura di Bacheca", "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-dce9864c2ff3", "type": "note", "x": 760, "y": 100, "w": 320, "html": "<p><b>Agenti (MCP)</b></p><p>mcp/bacheca-mcp.js: server MCP stdio per Claude Code/Codex. Traduce i tool (board_overview, claim_card, add_element...) in chiamate HTTP a /api/board/* con token Bearer + sessione.</p>", "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-b7cdb85e2007", "type": "note", "x": 40, "y": 360, "w": 300, "html": "<p><b>app.js / sync.js / agents-card.js</b></p><ul><li>app.js: motore della lavagna nel browser (stato, rendering, IndexedDB)</li><li>sync.js: sincronizza lo stato con il server (push/pull su /api/lavagna, SSE)</li><li>agents-card.js: riquadro &quot;Agenti&quot; — legge/scrive le card tramite /api/board/*</li></ul>", "col": "ag-5942aec4d3c4", "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-dcfa62fd9b03", "type": "note", "x": 40, "y": 620, "w": 300, "html": "<p><b>server.js</b></p><p>Server HTTP: file statici + instrada /api/board/* e /api/lavagna/* ai due moduli sottostanti.</p>", "col": "ag-35ab6555ce7d", "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-a13bd967c8ba", "type": "note", "x": 40, "y": 880, "w": 300, "html": "<p><b>board.js</b></p><p>Spazio agenti: card (todo/doing/blocked/review/done), token, permessi, pausa, audit. Espone /api/board/*.</p>", "col": "ag-35ab6555ce7d", "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-5ed26413b65c", "type": "note", "x": 40, "y": 1140, "w": 300, "html": "<p><b>lavagna.js</b></p><p>Lavagna condivisa (board/elementi/etichette) per le persone su /api/lavagna. Riceve &quot;hook&quot; da board.js per creare card/nota come elementi visivi.</p>", "col": "ag-35ab6555ce7d", "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-985bdd57197a", "type": "line", "x": 0, "y": 0, "w": 0, "a": "ag-b7cdb85e2007", "b": "ag-dcfa62fd9b03", "label": "fetch /api/board/*, /api/lavagna/* + SSE /events", "dash": false, "arrowEnd": true, "arrowStart": false, "width": 2, "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-de60e53ad012", "type": "line", "x": 0, "y": 0, "w": 0, "a": "ag-dcfa62fd9b03", "b": "ag-a13bd967c8ba", "label": "instrada richieste spazio agenti", "dash": false, "arrowEnd": true, "arrowStart": false, "width": 2, "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-3c9aae592f4b", "type": "line", "x": 0, "y": 0, "w": 0, "a": "ag-dcfa62fd9b03", "b": "ag-5ed26413b65c", "label": "instrada richieste lavagna condivisa", "dash": false, "arrowEnd": true, "arrowStart": false, "width": 2, "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-4224be46ecbe", "type": "line", "x": 0, "y": 0, "w": 0, "a": "ag-a13bd967c8ba", "b": "ag-5ed26413b65c", "label": "hook: card/nota → elemento lavagna", "dash": false, "arrowEnd": true, "arrowStart": false, "width": 2, "agentAuthor": "claude-code", "agentSession": "f997"}, {"id": "ag-c625e9314162", "type": "line", "x": 0, "y": 0, "w": 0, "a": "ag-dce9864c2ff3", "b": "ag-dcfa62fd9b03", "label": "HTTP /api/board/* (Bearer token agente + sessione)", "dash": false, "arrowEnd": true, "arrowStart": false, "width": 2, "agentAuthor": "claude-code", "agentSession": "f997"}];
+  // terza parte: lo schema dell'architettura disegnato da Claude Code (permesso lavagna "solo i propri elementi"),
+  // riordinato dall'alto in basso e con testi brevi per leggerlo anche dal telefono
+  const DEMO_BOARD_KEY3 = 'bacheca-demo-board-v4';
+  const SCHEMA_TITLE = 'Schema disegnato da un agente';
+  const sig = { agentAuthor: 'claude-code', agentSession: 'f997' };
+  const DEMO_SCHEMA = [
+    { id: 'h', type: 'heading', x: 40, y: 20, w: 740, html: 'Come funziona Bacheca', ...sig },
+    { id: 'intro', type: 'note', x: 40, y: 100, w: 740, color: '#fff6d6', html: '<p>Persone e agenti AI lavorano <b>sulla stessa lavagna</b>. Si legge dall’alto: chi la usa → il server → dove finiscono i dati.</p><p>Gli elementi con 🤖 li ha creati Claude Code da solo, leggendo il codice del progetto.</p>' },
+    { id: 'pers', type: 'note', x: 40, y: 260, w: 320, html: '<p><b>👤 Persone</b></p><p>Aprono la bacheca nel browser: note, frecce, tabelle, compiti per gli agenti.</p>', ...sig },
+    { id: 'agen', type: 'note', x: 460, y: 260, w: 320, html: '<p><b>🤖 Agenti</b></p><p>Claude Code e Codex, collegati con MCP e un token personale con permessi limitati.</p>', ...sig },
+    { id: 'srv', type: 'note', x: 250, y: 560, w: 320, html: '<p><b>🖥️ Server</b> (server.js)</p><p>Controlla chi sei e cosa puoi fare, poi passa la richiesta.</p>', ...sig },
+    { id: 'brd', type: 'note', x: 40, y: 860, w: 320, html: '<p><b>📋 Compiti</b> (board.js)</p><p>Card degli agenti: da fare, in corso, da approvare. Registro di tutto.</p>', ...sig },
+    { id: 'lav', type: 'note', x: 460, y: 860, w: 320, html: '<p><b>🗒️ Lavagna</b> (lavagna.js)</p><p>Gli elementi che vedi a schermo, condivisi tra persone e agenti. Anche le card degli agenti compaiono qui.</p>', ...sig },
+    { id: 'l1', type: 'line', a: 'pers', b: 'srv', label: 'browser', ...sig },
+    { id: 'l2', type: 'line', a: 'agen', b: 'srv', label: 'MCP + token', ...sig },
+    { id: 'l3', type: 'line', a: 'srv', b: 'brd', label: 'compiti', ...sig },
+    { id: 'l4', type: 'line', a: 'srv', b: 'lav', label: 'disegni', ...sig },
+  ];
   ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3))) seedDemoBoard(); });
   async function seedDemoBoard() {
     for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
@@ -170,24 +184,25 @@
     if (!ls.get(DEMO_BOARD_KEY3)) {
       ls.set(DEMO_BOARD_KEY3, '1');
       const prev = cur; cur = 'home';
-      const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
-      const pa = home.find(e => e.type === 'board' && S.boards[e.target]?.title === 'Prova agenti');
-      const bel = makeEl('board', pa ? pa.x + 160 : 40, pa ? pa.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: 'Schema disegnato da un agente' });
-      const b = S.boards[bel.target]; b.color = '#d9cff7'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🗺️' }; b.named = true;
-      schemaBid = b.id;
-      const ids = {}; for (const e of DEMO_SCHEMA) ids[e.id] = uid();
-      const made = {};
-      for (const e of DEMO_SCHEMA) { // colonne e riquadri prima, frecce per ultime (DEMO_SCHEMA è già in quest'ordine)
-        const { id, type, x, y, ...rest } = e;
-        const extra = { ...rest, board: schemaBid };
-        if (type === 'line') Object.assign(extra, { x1: 0, y1: 0, x2: 0, y2: 0, a: ids[e.a] || null, b: ids[e.b] || null, bx: 0, by: 0 });
-        if (rest.col) extra.col = ids[rest.col] || null;
-        const el = makeEl(type, x, y, extra);
-        delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el; made[id] = el;
-        if (type === 'column') el.items = (e.items || []).map(i => ids[i]).filter(Boolean);
+      const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === SCHEMA_TITLE);
+      if (old) { // versione precedente, illeggibile: la svuota e la riempie di nuovo
+        schemaBid = old.target;
+        for (const e of Object.values(S.elements)) if (e.board === schemaBid) delete S.elements[e.id];
+      } else {
+        const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+        const pa = home.find(e => e.type === 'board' && S.boards[e.target]?.title === 'Prova agenti');
+        const bel = makeEl('board', pa ? pa.x + 160 : 40, pa ? pa.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: SCHEMA_TITLE });
+        const b = S.boards[bel.target]; b.color = '#d9cff7'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🗺️' }; b.named = true;
+        schemaBid = b.id;
       }
-      const right = Math.max(...DEMO_SCHEMA.filter(e => e.type !== 'line').map(e => e.x + (e.w || 300))) + 60;
-      makeEl('note', right, 120, { board: schemaBid, w: 300, html: '<b>Com’è nato questo schema</b><br>Lo ha disegnato Claude Code da solo, leggendo il codice del progetto, con gli strumenti della bacheca (<i>add_element</i>): titolo, colonne, note e frecce con etichetta.<br><br>Aveva il permesso lavagna <b>«solo i propri elementi»</b>: può creare e modificare ciò che è suo, non toccare il resto. Ogni elemento porta la firma 🤖.<br><br>Qui è una copia di esempio: puoi spostarlo e modificarlo liberamente.' });
+      const ids = {}; for (const e of DEMO_SCHEMA) ids[e.id] = uid();
+      for (const e of DEMO_SCHEMA) { // riquadri prima, frecce per ultime
+        const { id, type, x = 0, y = 0, ...rest } = e;
+        const extra = { ...rest, board: schemaBid };
+        if (type === 'line') Object.assign(extra, { x1: 0, y1: 0, x2: 0, y2: 0, a: ids[e.a], b: ids[e.b], bx: 0, by: 0, arrowEnd: true, width: 2 });
+        const el = makeEl(type, x, y, extra);
+        delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el;
+      }
       cur = prev;
     }
     commit();
