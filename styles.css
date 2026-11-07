@@ -681,3 +681,48 @@ body.dark .crumb:hover, body.dark .ico:hover, body.dark .hbtn:hover { background
 }
 .ico[hidden] { display: none; }
 #save-status.save-err { color: #d93a2f; font-weight: 600; }
+
+/* ------------------------------ Elemento Agenti ------------------------------ */
+.el-agents > .card { padding: 14px 16px 12px; }
+.agx { display: grid; gap: 10px; font-size: 13px; }
+.agx-head { display: flex; align-items: center; gap: 7px; color: var(--ink); }
+.agx-head b { font: 600 16px/1.2 var(--serif); }
+.agx-proj { margin-left: auto; max-width: 58%; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--ink2); font: 500 12px var(--sans); padding: 3px 4px; }
+.agx-demo { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: #8a5a00; background: #fff4e5; border-radius: 4px; padding: 1px 5px; }
+.agx-live { width: 8px; height: 8px; border-radius: 50%; background: #c4c7cc; flex: none; }
+.agx-live.on { background: #2e9b48; box-shadow: 0 0 0 3px rgba(46,155,72,.15); }
+.agx-note, .agx-warn { font-size: 11px; color: var(--muted); line-height: 1.4; }
+.agx-paused { font-size: 12px; font-weight: 600; color: #8a5a00; background: #fff4e5; border-radius: 6px; padding: 6px 8px; }
+.agx-err { font-size: 12px; color: #d93a2f; }
+.agx-empty { color: var(--muted2); font-size: 12px; text-align: center; padding: 8px 0; }
+.agx-sec { display: grid; gap: 6px; }
+.agx-sec-h { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+.agx-sec.agx-s-review .agx-sec-h { color: #8a5a00; }
+.agx-sec.agx-s-review .agx-row { background: #fff8ec; box-shadow: inset 0 0 0 1px #f3dfbf; }
+.agx-row { border-radius: 8px; background: rgba(0,0,0,.03); padding: 7px 9px; display: grid; gap: 4px; }
+.agx-title { all: unset; cursor: pointer; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; color: var(--ink); }
+.agx-id { color: var(--muted); font-weight: 500; }
+.agx-meta { display: flex; flex-wrap: wrap; gap: 3px 6px; align-items: center; font-size: 11px; color: var(--muted); }
+.agx-who { border-radius: 10px; padding: 0 6px; font-weight: 600; }
+.agx-who.agent { background: #f1edfd; color: #6b4fd8; }
+.agx-who.human { background: #e8f5f2; color: #1f7a6b; }
+.agx-tag { border-radius: 4px; padding: 0 5px; background: rgba(0,0,0,.06); }
+.agx-tag.high { background: #fdecea; color: #d93a2f; font-weight: 600; }
+.agx-more { font-size: 11px; color: var(--muted); padding-left: 2px; }
+.agx-acts { display: flex; justify-content: flex-end; gap: 6px; margin-top: 2px; }
+.agx-btn { border: 0; border-radius: 6px; padding: 5px 10px; background: rgba(0,0,0,.06); color: var(--ink); font: 600 12px var(--sans); cursor: pointer; }
+.agx-btn.yes { background: #e7f6eb; color: #2e9b48; }
+.agx-btn.no { background: #fdecea; color: #d93a2f; }
+.agx-link { border: 0; background: none; color: var(--muted); font: 500 12px var(--sans); cursor: pointer; text-decoration: none; padding: 5px 2px; }
+.agx-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 2px; border-top: 1px solid var(--line); padding-top: 8px; }
+.agx-details { display: grid; gap: 6px; margin-top: 4px; }
+.agx-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45; background: rgba(0,0,0,.035); border-radius: 6px; padding: 6px 8px; max-height: 160px; overflow: auto; user-select: text; }
+.agx-comments { display: grid; gap: 5px; }
+.agx-cm { border-left: 3px solid #cfc3f5; padding-left: 7px; font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; }
+.agx-cm.human { border-color: #b9e0d8; }
+.agx-cm-h { font-size: 10px; color: var(--muted); }
+.agx-form, .agx-login { display: flex; gap: 6px; flex-wrap: wrap; }
+.agx-form input, .agx-login input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: 13px var(--sans); background: transparent; color: var(--ink); user-select: text; }
+.agx-login .agx-note { flex-basis: 100%; }
+body.dark .agx-sec.agx-s-review .agx-row { background: rgba(244,166,40,.08); box-shadow: inset 0 0 0 1px rgba(244,166,40,.3); }
+body.dark .agx-row, body.dark .agx-body { background: rgba(255,255,255,.05); }
