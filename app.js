@@ -335,6 +335,11 @@ function ensureNode(el, force) {
   const fresh = h('div', `el el-${el.type}`); fresh.dataset.id = el.id; fresh.dataset.rev = el.rev;
   const card = h('div', 'card'); fresh.appendChild(card);
   BUILD[el.type]?.(el, card, fresh);
+  // elementi creati o modificati da un agente: si vede sempre chi è stato (le note hanno già la loro intestazione)
+  if ((el.agentAuthor && el.type !== 'note') || (el.agentEditedBy && !el.agentAuthor)) {
+    const tag = h('div', 'agent-tag'); tag.textContent = el.agentAuthor ? `🤖 ${el.agentAuthor}` : `🤖 modificato da ${el.agentEditedBy}`;
+    tag.title = el.agentAuthor ? 'Creato da un agente' : `Modificato da un agente${el.agentEditedAt ? ' il ' + new Date(el.agentEditedAt).toLocaleString('it-IT') : ''}`; fresh.appendChild(tag);
+  }
   if (RESIZABLE.has(el.type)) fresh.appendChild(h('div', 'rz'));
   if (n && n.parentNode) { n.replaceWith(fresh); } else world().appendChild(fresh);
   nodes.set(el.id, fresh);

@@ -817,3 +817,7 @@ html, body { touch-action: pan-x pan-y; }
   .lh.mid { width: 20px; height: 20px; margin: -10px 0 0 -10px; }
   .line-svg .hit { stroke-width: 32; }
 }
+
+/* firma degli agenti sugli elementi della lavagna */
+.agent-tag { position: absolute; left: 0; top: -18px; font: 600 10px/16px var(--sans); color: #6b4fd8; background: #f1edfd; border-radius: 8px; padding: 0 7px; white-space: nowrap; pointer-events: none; z-index: 2; }
+body.dark .agent-tag { background: rgba(107,79,216,.25); color: #c9bbff; }

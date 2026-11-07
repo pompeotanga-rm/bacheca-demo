@@ -57,7 +57,8 @@ const Access = (() => {
   function summary(a) {
     if (a.role === 'human') return 'Persona: può tutto (approvare, fermare gli agenti, gestire gli accessi).';
     const p = a.perms; const yes = PERMS.filter(([k]) => p[k]).map(([, l]) => l.toLowerCase()); const no = PERMS.filter(([k]) => !p[k]).map(([, l]) => l.toLowerCase());
-    return `Progetti: ${p.projects.map(projLabel).join(', ')}. Può: ${yes.join(', ') || 'solo leggere'}.${no.length ? ` Non può: ${no.join(', ')}.` : ''} Massimo ${p.writesPerHour} modifiche/ora.`;
+    const wbt = { none: 'Lavagna: solo card e note', own: 'Lavagna: aggiunge elementi e modifica i propri', project: 'Lavagna: modifica anche gli elementi altrui' }[p.whiteboard || 'none'];
+    return `Progetti: ${p.projects.map(projLabel).join(', ')}. Può: ${yes.join(', ') || 'solo leggere'}.${no.length ? ` Non può: ${no.join(', ')}.` : ''} ${wbt}. Massimo ${p.writesPerHour} modifiche/ora.`;
   }
   function rowOf(a) {
     const r = mk('div', 'acc-row' + (a.revoked || a.expired ? ' off' : ''));
@@ -89,7 +90,7 @@ const Access = (() => {
       const l = mk('label', '', 'Nome'); nameInp = mk('input'); nameInp.required = true; nameInp.placeholder = role === 'agent' ? 'es. claude-code, codex, backup-notte' : 'es. mario'; nameInp.pattern = '[a-z0-9][a-z0-9-]{1,31}'; nameInp.autocapitalize = 'off'; nameInp.title = '2-32 caratteri: lettere minuscole, numeri e trattini';
       l.append(nameInp); f.append(l);
     }
-    let projBox = null, checks = {}, rate = null;
+    let projBox = null, checks = {}, rate = null, wb = null;
     if (role === 'agent') {
       f.append(mk('div', 'acc-label', 'Progetti a cui può accedere'));
       projBox = mk('div', 'acc-projects');
@@ -107,6 +108,9 @@ const Access = (() => {
         const l = mk('label', 'acc-check big'); const c = mk('input'); c.type = 'checkbox'; c.checked = !!perms[k]; checks[k] = c;
         const t = mk('span'); t.append(mk('b', '', label), mk('small', '', help)); l.append(c, t); f.append(l);
       }
+      const lw = mk('label', '', 'Lavagna (nelle board dei suoi progetti)'); wb = mk('select');
+      for (const [v, t] of [['none', 'Nessun accesso: solo card e note'], ['own', 'Aggiunge elementi e modifica solo i propri'], ['project', 'Modifica e sposta anche gli elementi altrui (mai eliminarli)']]) { const o = mk('option', '', t); o.value = v; wb.append(o); }
+      wb.value = perms.whiteboard || 'none'; lw.append(wb); f.append(lw);
       const lr = mk('label', '', 'Massimo di modifiche all\'ora'); rate = mk('input'); rate.type = 'number'; rate.min = 1; rate.max = 5000; rate.value = perms.writesPerHour; lr.append(rate); f.append(lr);
     }
     const le = mk('label', '', 'Scadenza della chiave');
@@ -128,7 +132,7 @@ const Access = (() => {
         const extra = projBox.querySelector('.acc-other').value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
         const projects = sel.includes('*') ? ['*'] : [...new Set([...sel, ...extra])];
         if (!projects.length) { err.textContent = 'Scegli almeno un progetto'; go.disabled = false; return; }
-        body2.perms = { projects, writesPerHour: Number(rate.value) || 120 };
+        body2.perms = { projects, writesPerHour: Number(rate.value) || 120, whiteboard: wb.value };
         for (const [k] of PERMS) body2.perms[k] = checks[k].checked;
       }
       if (exp.value === 'none') body2.expires = null; else if (exp.value) body2.expires = new Date(Date.now() + Number(exp.value) * 86400000).toISOString();
