@@ -111,6 +111,33 @@
   const ready = fetch('/api/board/health', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null)
     .then(j => { source = j && j.ok ? server : demo; source.connect(); return source; });
 
+  /* ------------------------------ Board di prova (solo demo) ------------------------------ */
+  // Nella demo senza server aggiunge una volta sola la board "Prova agenti" già pronta, accanto alle board
+  // esistenti (che non vengono toccate), così l'esempio si vede subito senza cercarlo nei menu.
+  const DEMO_BOARD_KEY = 'bacheca-demo-board-v1';
+  ready.then(src => { if (src.kind === 'demo' && !ls.get(DEMO_BOARD_KEY)) seedDemoBoard(); });
+  async function seedDemoBoard() {
+    for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
+    if (!S || ls.get(DEMO_BOARD_KEY)) return;
+    ls.set(DEMO_BOARD_KEY, '1');
+    const prev = cur; cur = 'home';
+    const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+    const y = home.length ? Math.max(...home.map(e => e.y)) + 170 : 60;
+    const bel = makeEl('board', 40, y, { title: 'Prova agenti' });
+    const b = S.boards[bel.target];
+    if (typeof autoBoardLook === 'function') autoBoardLook(b);
+    b.color = '#d9cff7'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🤖' };
+    const bid = b.id;
+    makeEl('heading', 20, 20, { board: bid, w: 338, html: 'Agenti sulla lavagna' });
+    makeEl('note', 20, 110, { board: bid, w: 338, html: 'Tocca <b>Simula un agente</b> qui sotto: compare una proposta in “Da approvare”. Poi tocca <b>Approva</b> o <b>Rifiuta</b>, oppure il titolo di una card per leggerla e scrivere all\'agente.' });
+    makeEl('agents', 20, 270, { board: bid, project: '*' });
+    makeEl('note', 390, 110, { board: bid, w: 300, html: '<b>Come funziona davvero</b><br>Qui i dati sono di esempio e restano su questo dispositivo.<br><br>Con il server (<i>node server.js</i>) la lavagna è la stessa su telefono e computer, e in questo riquadro compare il lavoro reale di Claude Code e Codex: le loro proposte arrivano da approvare, tu decidi da qui.<br><br>Accanto puoi tenere i tuoi appunti, schemi e link, come in qualsiasi board.' });
+    cur = prev;
+    commit();
+    openBoard(bid);
+    toast('Ho aggiunto la board «Prova agenti» con un esempio da provare');
+  }
+
   function getData(project) {
     if (cache && cache.project === project && Date.now() - cache.at < 400) return cache.promise;
     const promise = ready.then(src => src.data(project));
