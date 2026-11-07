@@ -164,6 +164,7 @@ function scheduleSave() {
 // lo si dice chiaramente invece di far credere che sia tutto salvato
 function saveNow() {
   clearTimeout(saveTimer); saveTimer = null;
+  if (typeof Sync !== 'undefined') Sync.changed(); // lavagna condivisa: manda al server ciò che è cambiato
   return DB.put('kv', 'state', S).then(() => { saveNow.failed = false; setSave('saved'); }, e => {
     console.error('Salvataggio non riuscito', e); setSave('error');
     if (!saveNow.failed) { saveNow.failed = true; toast('Salvataggio non riuscito: lo spazio del browser potrebbe essere esaurito. Esporta un backup dalle impostazioni.'); }

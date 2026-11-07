@@ -49,7 +49,9 @@ const urlCache = new Map();
 async function fileURL(id) {
   if (!id) return '';
   if (urlCache.has(id)) return urlCache.get(id);
-  const b = await DB.get('files', id); if (!b) return '';
+  let b = await DB.get('files', id);
+  if (!b && typeof Sync !== 'undefined') b = await Sync.fetchFile(id); // lavagna condivisa: file caricato da un altro dispositivo
+  if (!b) return '';
   const u = URL.createObjectURL(b); urlCache.set(id, u); return u;
 }
 // elimina i file che nessun elemento o board usa più (la cronologia di annullamento
@@ -65,6 +67,7 @@ async function cleanupFiles() {
 async function storeFile(blob) {
   const id = uid();
   try { await DB.put('files', id, blob); } catch (e) { toast('Impossibile salvare il file: lo spazio del browser potrebbe essere esaurito'); throw e; }
+  if (typeof Sync !== 'undefined') Sync.uploadFile(id);
   return id;
 }
 
@@ -1510,7 +1513,7 @@ function openPanel(kind) {
     row('Backup completo', 'Esporta tutte le board, file e immagini in un file .json', 'Esporta', exportAll);
     row('Ripristina backup', 'Importa un file di backup (sostituisce i dati attuali)', 'Importa', () => pickFiles('.json,application/json', false, f => importAll(f[0])));
     let armed = false;
-    const rr = row('Cancella tutto', 'Elimina definitivamente tutte le board e i file', 'Cancella', async () => {
+    const rr = row('Cancella tutto', 'Elimina definitivamente tutte le board e i file' + (typeof Sync !== 'undefined' && Sync.active() ? ', anche sul server e su tutti i dispositivi collegati' : ''), 'Cancella', async () => {
       if (!armed) { armed = true; $('button', rr).textContent = 'Conferma'; return; }
       S = freshState(); cur = 'home'; const ks = await DB.keys('files'); for (const k of ks) await DB.del('files', k); urlCache.clear(); hist.stack = []; hist.idx = -1; commit(); openBoard('home'); closePanel();
     }, 'danger');
@@ -1654,6 +1657,7 @@ function presentMode(on) {
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.body.classList.contains('present')) presentMode(false); });
 
 async function exportAll() {
+  if (typeof Sync !== 'undefined') await Sync.fetchMissing(); // con la lavagna condivisa alcuni file possono essere solo sul server
   const files = {};
   for (const k of await DB.keys('files')) { const b = await DB.get('files', k); files[k] = { type: b.type, data: await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); }) }; }
   saveBlob(new Blob([JSON.stringify({ app: 'bacheca', v: 1, state: S, files })], { type: 'application/json' }), `bacheca-backup-${new Date().toISOString().slice(0, 10)}.json`);
@@ -1672,7 +1676,7 @@ async function importAll(f) {
   if (!validBackup(data)) return toast('File di backup non valido: i dati attuali non sono stati modificati');
   // 2. si caricano i file; 3. solo alla fine si sostituisce lo stato
   try {
-    for (const [k, v] of Object.entries(data.files || {})) { const bl = await (await fetch(v.data)).blob(); await DB.put('files', k, bl); }
+    for (const [k, v] of Object.entries(data.files || {})) { const bl = await (await fetch(v.data)).blob(); await DB.put('files', k, bl); if (typeof Sync !== 'undefined') Sync.uploadFile(k); }
   } catch (e) { console.error(e); return toast('Impossibile importare i file del backup: i dati attuali non sono stati modificati'); }
   S = data.state; if (!S.labels) S.labels = {};
   cur = 'home'; urlCache.clear(); hist.stack = []; hist.idx = -1; commit(); closePanel(); openBoard('home'); toast('Backup importato');
@@ -1799,6 +1803,7 @@ async function init() {
   await DB.open();
   S = (await DB.get('kv', 'state')) || seedState();
   if (!S.labels) S.labels = {};
+  if (typeof Sync !== 'undefined') { await Sync.start(); Sync.afterInit(); } // lavagna condivisa sul server, se c'è
   await cleanupFiles(); // prima di attivare l'interfaccia: nessun file nuovo può arrivare nel frattempo
   const fromHash = location.hash.replace('#/', '');
   cur = S.boards[fromHash] ? fromHash : 'home';
