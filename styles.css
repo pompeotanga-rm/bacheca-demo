@@ -805,3 +805,6 @@ form.acc-box.acc-form > :not(.acc-head) { margin: 0 20px; }
 body.dark .acc-box { background: #262b34; }
 body.dark .acc-copy pre, body.dark .acc-btn { background: rgba(255,255,255,.07); }
 body.dark .acc-form input:not([type=checkbox]), body.dark .acc-form select, body.dark .acc-form textarea { background: #1d2129; }
+
+/* lo zoom con due dita è della lavagna (pinch.js), non della pagina */
+html, body { touch-action: pan-x pan-y; }
