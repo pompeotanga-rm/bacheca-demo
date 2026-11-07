@@ -11,7 +11,66 @@ const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(3
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
-const stripHtml = html => { const d = document.createElement('div'); d.innerHTML = html || ''; return d.textContent || ''; };
+/* ---------------------- Contenuti sicuri (HTML, URL, colori) ---------------------- */
+// Le board ora arrivano anche da altri dispositivi, backup importati e (in futuro) agenti: tutto ciò che
+// finisce nella pagina passa da qui. Un <template> è inerte: non esegue script e non carica immagini.
+const inertFragment = html => { const t = document.createElement('template'); t.innerHTML = html || ''; return t.content; };
+const stripHtml = html => inertFragment(html).textContent || '';
+// solo http/https (e mailto/tel per i link); immagini anche data:image in base64
+function safeUrl(u, kind = 'link') {
+  const v = String(u || '').trim(); if (!v) return '';
+  if (kind === 'img' && /^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(v)) return v;
+  try { const x = new URL(v, location.href); if (x.protocol === 'http:' || x.protocol === 'https:' || (kind === 'link' && (x.protocol === 'mailto:' || x.protocol === 'tel:'))) return x.href; } catch { }
+  return '';
+}
+function openUrl(u) { const v = safeUrl(u); if (v) window.open(v, '_blank', 'noopener'); else toast('Indirizzo non valido o non consentito'); }
+// colori: #rgb/#rrggbb(aa), rgb()/rgba()/hsl() con soli numeri, o un nome semplice
+const safeColor = (c, fallback = '#c4c6c8') => (typeof c === 'string' && /^(#[0-9a-f]{3,8}|(rgb|rgba|hsl|hsla)\([\d\s.,%]+\)|[a-z]{3,20})$/i.test(c.trim()) ? c.trim() : fallback);
+const SAFE_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'SUB', 'SUP', 'A', 'P', 'DIV', 'SPAN', 'BR', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'CODE', 'HR', 'MARK', 'FONT', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TD', 'TH', 'IMG']);
+const DROP_TAGS = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'FRAME', 'FRAMESET', 'OBJECT', 'EMBED', 'SVG', 'MATH', 'TEMPLATE', 'NOSCRIPT', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'OPTION', 'LINK', 'META', 'BASE', 'AUDIO', 'VIDEO', 'SOURCE', 'TRACK', 'CANVAS', 'DIALOG', 'TITLE']);
+// proprietà CSS ammesse (il browser scompone "border"/"padding" in varianti più specifiche, ammesse anche quelle)
+const SAFE_STYLE = /^(color|background-color|text-align|font-weight|font-style|text-decoration(-line|-style|-color|-thickness)?|border-collapse|border(-(top|right|bottom|left))?(-(width|style|color))?|padding(-(top|right|bottom|left))?|margin-left|width)$/;
+const safeCache = new Map();
+function safeHtml(html) {
+  html = String(html ?? ''); if (!html) return '';
+  const hit = safeCache.get(html); if (hit !== undefined) return hit;
+  const frag = inertFragment(html);
+  (function walk(node) {
+    for (const n of [...node.childNodes]) {
+      if (n.nodeType === 8) { n.remove(); continue; } // commenti
+      if (n.nodeType !== 1) continue;
+      const tag = n.tagName.toUpperCase();
+      if (DROP_TAGS.has(tag)) { n.remove(); continue; }
+      if (!SAFE_TAGS.has(tag)) { walk(n); n.replaceWith(...n.childNodes); continue; } // tag sconosciuto: resta il contenuto
+      if (tag === 'IMG') { const src = safeUrl(n.getAttribute('src'), 'img'); if (!src) { n.remove(); continue; } n.setAttribute('src', src); }
+      for (const a of [...n.attributes]) {
+        const name = a.name.toLowerCase(), v = a.value;
+        if (tag === 'IMG' && name === 'src') continue;
+        if (name === 'style') {
+          const tmp = n.ownerDocument.createElement('span');
+          for (let i = 0; i < n.style.length; i++) { const p = n.style[i], val = n.style.getPropertyValue(p); if (SAFE_STYLE.test(p) && !/url\(|expression|\\|javascript/i.test(val)) tmp.style.setProperty(p, val); }
+          if (tmp.style.cssText) n.setAttribute('style', tmp.style.cssText); else n.removeAttribute('style'); // il browser ricompone le forme brevi
+          continue;
+        }
+        let keep = false;
+        if (name === 'class') keep = /^[\w -]{0,80}$/.test(v);
+        else if (tag === 'A' && name === 'href') { const u = safeUrl(v); if (u) { n.setAttribute('href', u); continue; } }
+        else if (tag === 'A' && name === 'target') keep = v === '_blank';
+        else if (tag === 'IMG' && (name === 'alt' || name === 'width' || name === 'height')) keep = name === 'alt' || /^\d{1,4}$/.test(v);
+        else if (tag === 'FONT' && name === 'color') keep = safeColor(v, '') !== '';
+        else if ((tag === 'TD' || tag === 'TH') && (name === 'colspan' || name === 'rowspan')) keep = /^\d{1,2}$/.test(v);
+        if (!keep) n.removeAttribute(a.name);
+      }
+      if (tag === 'A') n.setAttribute('rel', 'noopener noreferrer');
+      walk(n);
+    }
+  })(frag);
+  const d = document.createElement('div'); d.appendChild(frag);
+  const out = d.innerHTML;
+  if (safeCache.size > 2000) safeCache.clear();
+  safeCache.set(html, out); safeCache.set(out, out);
+  return out;
+}
 const fmtDate = ts => new Date(ts).toLocaleString('it-IT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const fmtSize = b => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
 
@@ -93,6 +152,9 @@ function commit() {
   if (hist.stack.length > 200) hist.stack.shift();
   hist.idx = hist.stack.length - 1; updateUndoBtns();
 }
+// salva e aggiorna l'istantanea corrente senza creare un passo di annullamento (es. l'anteprima di un link
+// che arriva dopo): così ridisegnare uno stato vecchio con Annulla non cancella più la possibilità di Ripetere
+function commitSilent() { scheduleSave(); if (hist.idx >= 0) hist.stack[hist.idx] = JSON.stringify(S); }
 function undo() { if (hist.idx <= 0) return; blurEditing(); hist.idx--; restoreSnap(); }
 function redo() { if (hist.idx >= hist.stack.length - 1) return; blurEditing(); hist.idx++; restoreSnap(); }
 function restoreSnap() {
@@ -106,7 +168,8 @@ function updateUndoBtns() { $('#btn-undo').disabled = hist.idx <= 0; $('#btn-red
 const E = id => S.elements[id];
 const nextZ = () => ++S.seq;
 function boardEls(b = cur) { return Object.values(S.elements).filter(e => e.board === b && !e.deleted); }
-function boardCardOf(boardId) { return Object.values(S.elements).find(e => e.type === 'board' && e.target === boardId); }
+// la card "vera" di una board: le scorciatoie (shortcut) puntano alla stessa board ma non la possiedono
+function boardCardOf(boardId) { return Object.values(S.elements).find(e => e.type === 'board' && e.target === boardId && !e.shortcut); }
 function isBoardHidden(bid) { // board whose card (or an ancestor's card) is in trash
   let b = S.boards[bid];
   while (b && b.parent) { const c = boardCardOf(b.id); if (!c || c.deleted) return true; b = S.boards[b.parent]; }
@@ -225,7 +288,7 @@ function renderExtras(el, n) {
   const labels = (el.labels || []).map(id => S.labels[id]).filter(Boolean);
   if (labels.length) {
     if (!lb) { lb = h('div', 'x-labels'); card.prepend(lb); }
-    lb.innerHTML = labels.map(l => `<span style="background:${l.color}">${esc(l.name)}</span>`).join('');
+    lb.innerHTML = labels.map(l => `<span style="background:${safeColor(l.color)}">${esc(l.name)}</span>`).join('');
   } else if (lb) lb.remove();
   // title above card
   let tt = $(':scope > .x-title', n);
@@ -254,7 +317,7 @@ function renderExtras(el, n) {
   const rs = Object.entries(el.reactions || {}).filter(([, c]) => c > 0);
   if (rs.length) {
     if (!rx) { rx = h('div', 'x-react'); n.appendChild(rx); }
-    rx.innerHTML = rs.map(([e, c]) => `<button class="no-drag" data-r="${e}">${e} ${c}</button>`).join('');
+    rx.innerHTML = rs.map(([e, c]) => `<button class="no-drag" data-r="${esc(e)}">${esc(e)} ${esc(c)}</button>`).join('');
     rx.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; const r = b.dataset.r; el.reactions[r] = (el.reactions[r] || 1) - 1; if (el.reactions[r] <= 0) delete el.reactions[r]; commit(); applyDecor(el); };
   } else if (rx) rx.remove();
   // locked badge
@@ -296,13 +359,13 @@ function updateStageSize() {
 
 /* ----------------------- Element builders ------------------------ */
 function editableDiv(cls, html, ph, onInput) {
-  const d = h('div', 'editable ' + cls); d.innerHTML = html || ''; d.dataset.ph = ph; d.contentEditable = 'false';
+  const d = h('div', 'editable ' + cls); d.innerHTML = safeHtml(html); d.dataset.ph = ph; d.contentEditable = 'false';
   d.addEventListener('input', () => onInput(d));
   return d;
 }
 function liveEditable(cls, text, ph, onInput, opts = {}) { // always editable (no drag from it)
   const d = h('div', 'editable no-drag ' + cls); d.contentEditable = opts.plain ? 'plaintext-only' : 'true'; d.dataset.ph = ph;
-  if (opts.html) d.innerHTML = text || ''; else d.textContent = text || '';
+  if (opts.html) d.innerHTML = safeHtml(text); else d.textContent = text || '';
   d.addEventListener('input', () => onInput(d));
   d.addEventListener('blur', () => commit());
   return d;
@@ -400,8 +463,8 @@ const BUILD = {
     if (el.fileId) { const v = h('video', 'no-drag'); v.controls = true; fileURL(el.fileId).then(u => v.src = u); fr.appendChild(v); }
     else {
       const emb = embedUrl(el.url);
-      if (emb.video) { const v = h('video', 'no-drag'); v.controls = true; v.src = el.url; fr.appendChild(v); }
-      else { const f = h('iframe', 'no-drag'); f.src = emb.src; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true; fr.appendChild(f); }
+      if (emb.video) { const v = h('video', 'no-drag'); v.controls = true; v.src = safeUrl(el.url); fr.appendChild(v); }
+      else if (emb.src) { const f = h('iframe', 'no-drag'); f.src = emb.src; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true; fr.appendChild(f); }
     }
     card.appendChild(fr);
   },
@@ -486,11 +549,12 @@ function urlForm(card, label, ph, hint, onSubmit) {
 function prettyHost(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } }
 function shortUrl(u) { return prettyHost(u); }
 function embedUrl(u) {
-  let m;
+  let m; u = String(u || '');
   if ((m = u.match(/(?:youtube(?:-nocookie)?\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|live\/|v\/)|youtu\.be\/)([\w-]{6,})/))) return { src: `https://www.youtube.com/embed/${m[1]}` };
   if ((m = u.match(/vimeo\.com\/(\d+)/))) return { src: `https://player.vimeo.com/video/${m[1]}` };
+  if (!safeUrl(u)) return {}; // javascript:, data: e simili non vengono mai incorporati
   if (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(u)) return { video: true };
-  return { src: u };
+  return { src: safeUrl(u) };
 }
 function focusEnd(n) { if (!n) return; n.focus(); const r = document.createRange(); r.selectNodeContents(n); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
 function pickFiles(accept, multiple, cb) {
@@ -509,7 +573,8 @@ function strokePath(pts) {
   const l = pts[pts.length - 1]; return d + ` L${l[0]} ${l[1]}`;
 }
 function strokesSVG(strokes, vw, vh) {
-  return `<svg viewBox="0 0 ${vw} ${vh}" style="stroke-linecap:round;stroke-linejoin:round">${strokes.map(s => `<path d="${strokePath(s.pts)}" stroke="${s.c}" stroke-width="${s.w}" fill="none"/>`).join('')}</svg>`;
+  const num = v => (Number.isFinite(+v) ? +v : 0);
+  return `<svg viewBox="0 0 ${num(vw)} ${num(vh)}" style="stroke-linecap:round;stroke-linejoin:round">${(strokes || []).map(s => `<path d="${esc(strokePath((s.pts || []).map(p => ({ ...p, x: num(p.x), y: num(p.y) }))))}" stroke="${esc(safeColor(s.c, '#323b4a'))}" stroke-width="${num(s.w)}" fill="none"/>`).join('')}</svg>`;
 }
 
 /* ------------------------------ Lines ----------------------------- */
@@ -575,7 +640,7 @@ function renderChrome() {
   chain.forEach((bb, i) => {
     if (i) cr.appendChild(h('span', 'crumb-sep', '/'));
     const c = h('div', 'crumb' + (i === chain.length - 1 && chain.length > 1 ? ' current' : ''));
-    c.innerHTML = bb.id === 'home' ? `<span class="logo">B</span><span>Home</span>` : `<span class="sq" style="background:${bb.color}"></span><span></span>`;
+    c.innerHTML = bb.id === 'home' ? `<span class="logo">B</span><span>Home</span>` : `<span class="sq" style="background:${safeColor(bb.color)}"></span><span></span>`;
     if (bb.id !== 'home') c.lastChild.textContent = bb.title || 'Senza titolo';
     c.onclick = () => openBoard(bb.id);
     cr.appendChild(c);
@@ -765,9 +830,11 @@ function purgeElement(id) {
   const el = E(id); if (!el) return;
   const kill = [id];
   if (el.type === 'column') for (const c of Object.values(S.elements)) if (c.trashParent === id) kill.push(c.id);
-  if (el.type === 'board') { // remove whole sub tree
+  if (el.type === 'board' && !el.shortcut) { // remove whole sub tree (una scorciatoia invece non possiede la board: si elimina solo lei)
     const stack = [el.target];
-    while (stack.length) { const b = stack.pop(); for (const e of Object.values(S.elements)) if (e.board === b) { kill.push(e.id); if (e.type === 'board') stack.push(e.target); } delete S.boards[b]; }
+    while (stack.length) { const b = stack.pop(); for (const e of Object.values(S.elements)) if (e.board === b) { kill.push(e.id); if (e.type === 'board' && !e.shortcut) stack.push(e.target); } delete S.boards[b]; }
+    // le scorciatoie verso board ormai eliminate non avrebbero più dove portare
+    for (const e of Object.values(S.elements)) if (e.type === 'board' && e.shortcut && !S.boards[e.target]) kill.push(e.id);
   }
   // i file NON si cancellano qui: con ⌘Z l'elemento può tornare e deve ritrovare il suo file.
   // I file non più usati da nessun elemento vengono eliminati al prossimo avvio (cleanupFiles).
@@ -778,7 +845,7 @@ function duplicate(ids, offset = 24) {
   const map = {}; const out = [];
   const copyOne = (src, board) => {
     const c = JSON.parse(JSON.stringify(src)); c.id = uid(); c.z = nextZ(); c.created = c.modified = Date.now(); c.board = board; map[src.id] = c.id;
-    if (c.type === 'board') { // deep copy of board tree
+    if (c.type === 'board' && !c.shortcut) { // deep copy of board tree (la copia di una scorciatoia resta una scorciatoia)
       const ob = S.boards[src.target]; const nb = { ...JSON.parse(JSON.stringify(ob)), id: uid(), parent: board, title: ob.title + (board === src.board ? ' (copia)' : '') };
       S.boards[nb.id] = nb; c.target = nb.id;
       const kids = Object.values(S.elements).filter(e => e.board === ob.id && !e.deleted);
@@ -1227,14 +1294,14 @@ function openDocument(el) {
   const box = h('div', 'doc-editor');
   const tb = h('div', 'doc-tb'); const sc = h('div', 'doc-scroll');
   const title = h('div', 'doc-title editable'); title.contentEditable = 'plaintext-only'; title.dataset.ph = 'Titolo del documento'; title.textContent = el.title;
-  const body = h('div', 'doc-body editable'); body.contentEditable = 'true'; body.dataset.ph = 'Inizia a scrivere…'; body.innerHTML = el.html;
+  const body = h('div', 'doc-body editable'); body.contentEditable = 'true'; body.dataset.ph = 'Inizia a scrivere…'; body.innerHTML = safeHtml(el.html);
   title.oninput = () => { el.title = title.textContent; touch(el); scheduleSave(); };
   title.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); body.focus(); } };
   body.oninput = () => { el.html = body.innerHTML; touch(el); scheduleSave(); };
   buildFormatBar(tb, body);
   $$('button', tb).forEach(b => b.style.color = '#2f3337');
   tb.appendChild(h('span', 'grow'));
-  const exp = h('button', '', '⬇︎ .doc'); exp.title = 'Esporta come documento Word'; exp.onclick = () => saveBlob(new Blob([wordHtml(el.title, el.html)], { type: 'application/msword' }), (el.title || 'documento') + '.doc');
+  const exp = h('button', '', '⬇︎ .doc'); exp.title = 'Esporta come documento Word'; exp.onclick = () => saveBlob(new Blob([wordHtml(el.title, safeHtml(el.html))], { type: 'application/msword' }), (el.title || 'documento') + '.doc');
   const close = h('button', '', '✕'); close.title = 'Chiudi (Esc)';
   tb.append(exp, close);
   sc.append(title, body); box.append(tb, sc); ov.appendChild(box);
@@ -1290,7 +1357,7 @@ function attachComment(el) {
   const r = elRect(el.id);
   const c = makeEl('comment', (el.col ? r.x : el.x) + r.w + 24, el.col ? r.y : el.y);
   const l = makeEl('line', 0, 0, { x1: 0, y1: 0, x2: 0, y2: 0, a: el.id, b: c.id, bx: 0, by: 0, arrowEnd: false, dash: true, width: 1.5, color: '#6d83d8' });
-  void l; sel.clear(); sel.add(c.id); render(); commit(); $('.cm-input .editable', nodes.get(c.id))?.focus();
+  void l; sel.clear(); sel.add(c.id); render(); commit(); $('.cm-form .editable, .cm-input .editable', nodes.get(c.id))?.focus();
 }
 
 /* ---------------------------- Menus ------------------------------- */
@@ -1308,7 +1375,7 @@ function showElementMenu(x, y, ids) {
   const single = els.length === 1 ? els[0] : null;
   menuAt(x, y, m => {
     if (single?.type === 'board') { mi(m, 'Apri board', () => openBoard(single.target)); mi(m, 'Rinomina', () => enterEdit(single)); msep(m); }
-    if (single?.type === 'link' && single.url) { mi(m, 'Apri link ↗', () => window.open(single.url, '_blank', 'noopener')); mi(m, 'Modifica URL', () => { single.url = ''; rebuild(single); commit(); }); msep(m); }
+    if (single?.type === 'link' && single.url) { mi(m, 'Apri link ↗', () => openUrl(single.url)); mi(m, 'Modifica URL', () => { single.url = ''; rebuild(single); commit(); }); msep(m); }
     if (single?.type === 'video' && (single.url || single.fileId)) { mi(m, 'Cambia video', () => { single.url = ''; single.fileId = null; rebuild(single); commit(); }); msep(m); }
     if (single?.type === 'map' && single.query) { mi(m, 'Cambia luogo', () => { single.query = ''; rebuild(single); commit(); }); msep(m); }
     if (single?.type === 'image' && single.fileId) { mi(m, 'Apri immagine', () => openLightbox(single)); mi(m, 'Sostituisci immagine', () => pickFiles('image/*', false, async f => { single.fileId = await storeFile(f[0]); single.name = f[0].name; rebuild(single); commit(); })); msep(m); }
@@ -1338,14 +1405,14 @@ function showElementMenu(x, y, ids) {
 function moveToBoardMenu(x, y, ids) {
   menuAt(x, y, m => {
     m.appendChild(h('div', 'mlabel', 'Sposta in'));
-    const excluded = new Set(ids.map(E).filter(e => e.type === 'board').map(e => e.target));
+    const excluded = new Set(ids.map(E).filter(e => e.type === 'board' && !e.shortcut).map(e => e.target));
     const isUnder = (b, anc) => { while (b) { if (excluded.has(b)) return true; b = S.boards[b]?.parent; } return false; };
     Object.values(S.boards).filter(b => b.id !== cur && !isBoardHidden(b.id) && !isUnder(b.id)).forEach(b => {
       mi(m, `<span class="sq" style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${b.color};margin-right:8px"></span>${esc(b.title)}`, () => {
         ids.forEach(id => {
           const e = E(id); if (!e) return;
           if (e.col) { const c = E(e.col); if (c && !ids.includes(c.id)) { c.items = c.items.filter(x => x !== id); e.col = null; } }
-          e.board = b.id; if (e.type === 'board') S.boards[e.target].parent = b.id;
+          e.board = b.id; if (e.type === 'board' && !e.shortcut && S.boards[e.target]) S.boards[e.target].parent = b.id;
           if (e.type === 'column') e.items.forEach(ci => { E(ci).board = b.id; });
           if (e.type === 'line') { if (e.a && !ids.includes(e.a)) e.a = null; if (e.b && !ids.includes(e.b)) e.b = null; }
         });
@@ -1480,8 +1547,8 @@ function openPanel(kind) {
       if (!res.length) body.appendChild(h('div', 'pempty', 'Nessun risultato'));
       res.slice(0, 100).forEach(x => {
         const r = h('div', 'prow');
-        if (x.kind === 'board') { r.innerHTML = `<span class="tag" style="background:${x.b.color};color:#fff">Board</span><div class="pt"><b></b><small>${esc(S.boards[x.b.parent]?.title || '')}</small></div>`; $('b', r).innerHTML = hl(x.b.title, q); r.onclick = () => { openBoard(x.b.id); closePanel(); }; }
-        else { r.innerHTML = `<span class="tag">${TYPE_LABEL[x.e.type]}</span><div class="pt"><b></b><small>${esc(S.boards[x.e.board]?.title || '')}</small></div>`; $('b', r).innerHTML = hl(snippet(x.t, q), q); r.onclick = () => { closePanel(); openBoard(x.e.board, x.e.id); }; }
+        if (x.kind === 'board') { r.innerHTML = `<span class="tag" style="background:${safeColor(x.b.color)};color:#fff">Board</span><div class="pt"><b></b><small>${esc(S.boards[x.b.parent]?.title || '')}</small></div>`; $('b', r).innerHTML = hl(x.b.title, q); r.onclick = () => { openBoard(x.b.id); closePanel(); }; }
+        else { r.innerHTML = `<span class="tag">${esc(TYPE_LABEL[x.e.type] || x.e.type)}</span><div class="pt"><b></b><small>${esc(S.boards[x.e.board]?.title || '')}</small></div>`; $('b', r).innerHTML = hl(snippet(x.t, q), q); r.onclick = () => { closePanel(); openBoard(x.e.board, x.e.id); }; }
         r.style.cursor = 'pointer'; body.appendChild(r);
       });
     };
@@ -1600,7 +1667,7 @@ function elToMd(e, plain) {
 function boardToMd(bid, sub, lvl, plain) {
   const b = S.boards[bid]; let out = (plain ? b.title : '#'.repeat(Math.min(lvl, 6)) + ' ' + b.title) + '\n\n';
   for (const e of readingOrder(bid)) {
-    if (e.type === 'board') { out += sub ? boardToMd(e.target, true, lvl + 1, plain) : (plain ? `[Board] ${S.boards[e.target].title}` : `📋 **${S.boards[e.target].title}**`) + '\n\n'; continue; }
+    if (e.type === 'board') { out += sub && !e.shortcut ? boardToMd(e.target, true, lvl + 1, plain) : (plain ? `[Board] ${S.boards[e.target].title}` : `📋 **${S.boards[e.target].title}**`) + '\n\n'; continue; }
     const s = elToMd(e, plain); if (s.trim()) out += s + '\n\n';
   }
   return out;
@@ -1789,12 +1856,7 @@ async function onPaste(e) {
   }
   render(); commit();
 }
-function sanitizeHtml(html) {
-  const d = document.createElement('div'); d.innerHTML = html;
-  d.querySelectorAll('script,style,meta,link,iframe,object').forEach(n => n.remove());
-  d.querySelectorAll('*').forEach(n => { [...n.attributes].forEach(a => { if (!(n.tagName === 'A' && a.name === 'href')) n.removeAttribute(a.name); }); if (n.tagName === 'A' && /^javascript:/i.test(n.getAttribute('href') || '')) n.removeAttribute('href'); });
-  return d.innerHTML;
-}
+function sanitizeHtml(html) { return safeHtml(html); } // testo incollato: stesso filtro di tutto il resto
 
 /* ------------------------------ Init ------------------------------ */
 async function init() {

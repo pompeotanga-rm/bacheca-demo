@@ -16,6 +16,7 @@
   const listeners = new Set();
   const notify = () => { cache = null; for (const f of listeners) f(); };
   let cache = null; // { project, at, promise }
+  let authFailed = false; // l'ultimo token provato è stato rifiutato dal server
 
   /* ------------------------------ Server vero ------------------------------ */
   const server = {
@@ -24,7 +25,8 @@
     async call(method, path, body) {
       const r = await fetch(path, { method, headers: { Authorization: `Bearer ${ls.get(TOKEN_KEY) || ''}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
       let j = {}; try { j = await r.json(); } catch { }
-      if (r.status === 401) { ls.set(TOKEN_KEY, null); const e = new Error('Token non valido o revocato'); e.auth = true; throw e; }
+      // il token è condiviso con la lavagna (sync.js): qui non si cancella, si chiede solo di accedere di nuovo
+      if (r.status === 401) { const e = new Error('Token non valido o revocato'); e.auth = true; throw e; }
       if (!r.ok) { const e = new Error(j.error || `Errore ${r.status}`); e.status = r.status; throw e; }
       return j;
     },
@@ -164,8 +166,8 @@
 
   async function draw(el, box, refresh) {
     let src, data, err = null;
-    try { src = await ready; if (src.kind === 'server' && !src.hasToken()) data = null; else data = await getData(el.project); }
-    catch (e) { err = e; }
+    try { src = await ready; if (src.kind === 'server' && (!src.hasToken() || authFailed)) data = null; else data = await getData(el.project); }
+    catch (e) { err = e; if (e.auth) authFailed = true; }
     if (!box.isConnected) return;
     if (box.contains(document.activeElement) && document.activeElement.matches('input, textarea')) return; // non disturbare chi scrive
     box.replaceChildren();
@@ -189,7 +191,7 @@
     if (data?.paused) box.append(mk('div', 'agx-paused', 'Agenti in pausa: possono solo leggere.'));
 
     // accesso (server senza token)
-    if (src?.kind === 'server' && !src.hasToken()) { box.append(loginForm(refresh)); return; }
+    if (src?.kind === 'server' && (!src.hasToken() || authFailed)) { if (authFailed) box.append(mk('div', 'agx-err', 'Il token salvato non è più valido: accedi di nuovo.')); box.append(loginForm(refresh)); return; }
     if (err) { box.append(mk('div', 'agx-err', err.auth ? 'Token non valido: accedi di nuovo.' : `Impossibile leggere lo spazio agenti: ${err.message}`)); if (err.auth) box.append(loginForm(refresh)); return; }
 
     const cards = data.cards;
@@ -281,9 +283,15 @@
     f.onsubmit = async e => {
       e.preventDefault(); e.stopPropagation();
       const t = inp.value.trim(); if (!t) return;
-      ls.set(TOKEN_KEY, t);
-      try { await server.call('GET', '/api/board/me'); server.connect(); inp.blur(); notify(); toast('Spazio agenti collegato'); }
-      catch (err) { inp.blur(); toast(err.message); refresh(); }
+      // si verifica il token PRIMA di salvarlo: un token da agente non deve sostituire quello della lavagna
+      try {
+        const r = await fetch('/api/board/me', { headers: { Authorization: `Bearer ${t}` } });
+        const who = r.ok ? await r.json() : null;
+        if (!who) throw new Error('Token non valido');
+        if (who.role !== 'human') throw new Error('Questo è un token da agente: qui serve quello da persona');
+        ls.set(TOKEN_KEY, t); authFailed = false;
+        if (server.es) { server.es.close(); server.es = null; } server.connect(); inp.blur(); notify(); toast('Spazio agenti collegato');
+      } catch (err) { inp.blur(); toast(err.message); }
     };
     return f;
   }

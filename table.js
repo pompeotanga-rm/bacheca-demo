@@ -239,11 +239,21 @@ function evalFormula(el, src, visiting) {
   const v = comparison(); if (p < toks.length) err('#ERR');
   return Array.isArray(v) ? flat(v)[0] ?? '' : v;
 }
+// durante il disegno di una tabella ogni formula si calcola una volta sola: senza questa memoria le catene
+// (A2=A1+A1, A3=A2+A2, …) richiedevano un tempo che raddoppia a ogni riga e bloccavano la pagina
+let cellCache = null;
 function cellValue(el, r, c, visiting = new Set()) {
+  // calcolo isolato (fuori dal disegno della tabella): memoria temporanea valida solo per questo calcolo
+  if (!cellCache) { cellCache = new Map(); try { return cellValue(el, r, c, visiting); } finally { cellCache = null; } }
   const raw = el.rows[r]?.[c] ?? '';
   if (typeof raw === 'string' && raw.startsWith('=') && raw.length > 1) {
-    const k = stKey(r, c); visiting.add(k);
-    try { return evalFormula(el, raw.slice(1), visiting); } catch (e) { return { error: e.cellErr || '#ERR' }; } finally { visiting.delete(k); }
+    const k = stKey(r, c), ck = el.id + '|' + k;
+    if (cellCache && cellCache.has(ck)) return cellCache.get(ck);
+    visiting.add(k);
+    let v;
+    try { v = evalFormula(el, raw.slice(1), visiting); } catch (e) { v = { error: e.cellErr || '#ERR' }; } finally { visiting.delete(k); }
+    if (cellCache) cellCache.set(ck, v); // un riferimento a una cella "in calcolo" è sempre un vero ciclo: il valore memorizzato resta corretto
+    return v;
   }
   const st = getSt(el, r, c);
   if (st.type === 'text') return raw;
@@ -339,6 +349,10 @@ function tPaint() {
 
 /* --------------------------- Build table --------------------------- */
 BUILD.table = function (el, card) {
+  cellCache = new Map();
+  try { buildTable(el, card); } finally { cellCache = null; }
+};
+function buildTable(el, card) {
   tNormalize(el);
   card.appendChild(h('div', 'tbl-grip'));
   const wrap = h('div', 'tbl-wrap');
@@ -352,12 +366,12 @@ BUILD.table = function (el, card) {
       const v = formatValue(el, r, c, cellValue(el, r, c));
       const inner = h('div', 'cv');
       if (v.checkbox) { const cb = h('span', 'tcb' + (v.checked ? ' on' : '')); cb.dataset.cb = '1'; inner.appendChild(cb); }
-      else if (/^https?:\/\/\S+$/.test(v.text)) { const a = h('a'); a.href = v.text; a.target = '_blank'; a.rel = 'noopener'; a.textContent = v.text; inner.appendChild(a); }
+      else if (/^https?:\/\/\S+$/.test(v.text) && safeUrl(v.text)) { const a = h('a'); a.href = safeUrl(v.text); a.target = '_blank'; a.rel = 'noopener'; a.textContent = v.text; inner.appendChild(a); }
       else inner.textContent = v.text;
       if (v.cls) td.classList.add(v.cls);
       if (st.bg) { td.style.background = st.bg; if (st.bg === '#2f3337') inner.style.color = '#fff'; }
       if (st.color) inner.style.color = st.color;
-      if (st.hl) { inner.innerHTML = `<mark style="background:${st.hl};${st.hl === '#2f3337' ? 'color:#fff' : ''}">${inner.innerHTML}</mark>`; }
+      if (st.hl) { const mk = h('mark'); mk.style.background = safeColor(st.hl, 'transparent'); if (st.hl === '#2f3337') mk.style.color = '#fff'; mk.append(...inner.childNodes); inner.appendChild(mk); } // senza HTML: il colore arriva dai dati
       if (st.bold) inner.style.fontWeight = '700';
       if (st.italic) inner.style.fontStyle = 'italic';
       if (st.strike) inner.style.textDecoration = 'line-through';
@@ -378,7 +392,7 @@ BUILD.table = function (el, card) {
   const ar = h('button', 'tbl-add r no-drag', '+'); ar.title = 'Aggiungi riga'; ar.onclick = () => tableOp(el, 'rowBelow', el.rows.length - 1, 0);
   const ac = h('button', 'tbl-add c no-drag', '+'); ac.title = 'Aggiungi colonna'; ac.onclick = () => tableOp(el, 'colRight', 0, el.colW.length - 1);
   card.append(ar, ac);
-};
+}
 
 function tRebuild(el) { const s = TBL.st; if (s) { s.editing = false; s.ed = null; } rebuild(el); if (s && s.id === el.id) { TBL.st = s; nodes.get(el.id)?.classList.add('cellmode'); requestAnimationFrame(tPaint); } }
 

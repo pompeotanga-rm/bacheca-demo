@@ -116,11 +116,11 @@ function autoInitials(t) {
 function boardIconHTML(b) {
   const ic = b.icon;
   if (!ic) return '';
-  if (ic.type === 'emoji') return `<span class="emoji">${ic.ch}</span>`;
-  if (ic.type === 'letters') return `<span class="letters ${ic.text.length === 4 ? 'l4' : ''}">${esc(ic.text)}</span>`;
+  if (ic.type === 'emoji') return `<span class="emoji">${esc(ic.ch)}</span>`;
+  if (ic.type === 'letters') return `<span class="letters ${String(ic.text).length === 4 ? 'l4' : ''}">${esc(ic.text)}</span>`;
   return '';
 }
-function boardBg(b) { return b.color2 ? `linear-gradient(135deg, ${b.color} 50%, ${b.color2} 50%)` : b.color; }
+function boardBg(b) { return b.color2 ? `linear-gradient(135deg, ${safeColor(b.color)} 50%, ${safeColor(b.color2)} 50%)` : safeColor(b.color); }
 function relTime(ts) {
   const s = (Date.now() - ts) / 1000;
   if (s < 45) return 'adesso'; if (s < 90) return '1 minuto fa'; if (s < 3600) return Math.round(s / 60) + ' minuti fa';
@@ -201,23 +201,28 @@ BUILD.heading = function (el, card) {
   card.appendChild(t);
 };
 async function unfurlInto(el) {
+  const id = el.id, url = el.url; let meta = null;
   try {
-    const r = await fetch('/api/unfurl?url=' + encodeURIComponent(el.url)); const j = await r.json();
+    const r = await fetch('/api/unfurl?url=' + encodeURIComponent(url)); const j = await r.json();
     if (j.error) throw new Error(j.error);
-    el.meta = { title: j.title, description: j.description, image: j.image, favicon: j.favicon, site: j.site };
-    if (!el.title || el.title === prettyHost(el.url)) el.title = j.title || prettyHost(el.url);
-  } catch { el.meta = el.meta || { title: prettyHost(el.url) }; if (!el.title) el.title = prettyHost(el.url); }
-  touch(el); rebuild(el); commit();
+    meta = { title: j.title, description: j.description, image: j.image, favicon: j.favicon, site: j.site };
+  } catch { meta = null; }
+  // nel frattempo lo stato può essere cambiato (annulla, sincronizzazione): si aggiorna l'elemento attuale
+  const cur_ = E(id); if (!cur_ || cur_.url !== url || cur_.meta) return;
+  cur_.meta = meta || { title: prettyHost(url) };
+  if (!cur_.title || cur_.title === prettyHost(url)) cur_.title = (meta && meta.title) || prettyHost(url);
+  touch(cur_); rebuild(cur_); commitSilent(); // l'anteprima non è un passo da annullare
 }
 function linkBody(el, card, kind) {
   const m = el.meta || {};
   const img = h('div', 'lk-img' + (kind === 'video' ? ' video' : ''));
-  if (m.image) { img.style.backgroundImage = `url("${m.image.replace(/"/g, '%22')}")`; card.appendChild(img); }
+  const imgUrl = safeUrl(m.image, 'img');
+  if (imgUrl) { img.style.backgroundImage = `url("${imgUrl.replace(/["\\\n]/g, encodeURIComponent)}")`; card.appendChild(img); }
   else if (kind === 'video') card.appendChild(img);
-  if (kind === 'video') { img.appendChild(h('div', 'lk-play')); img.classList.add('no-drag'); img.addEventListener('click', () => { const emb = embedUrl(el.url); const fr = h('div', 'media-frame'); const f = h('iframe', 'no-drag'); f.src = (emb.src || el.url) + (emb.src && emb.src.includes('?') ? '&' : '?') + 'autoplay=1'; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true; fr.appendChild(f); img.replaceWith(fr); }); }
+  if (kind === 'video') { img.appendChild(h('div', 'lk-play')); img.classList.add('no-drag'); img.addEventListener('click', () => { const emb = embedUrl(el.url); if (!emb.src) return openUrl(el.url); /* mai incorporare indirizzi non http(s) */ const fr = h('div', 'media-frame'); const f = h('iframe', 'no-drag'); f.src = emb.src + (emb.src.includes('?') ? '&' : '?') + 'autoplay=1'; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.allowFullscreen = true; fr.appendChild(f); img.replaceWith(fr); }); }
   const meta = h('div', 'lk-meta');
   const head = h('div', 'lk-head');
-  if (kind === 'video' && /youtu/.test(el.url)) head.innerHTML = ICONS.play; else if (m.favicon && kind === 'video') { const i = h('img'); i.src = m.favicon; i.onerror = () => i.replaceWith(h('span', '', ICONS.linkcard)); head.appendChild(i); } else head.innerHTML = ICONS.linkcard;
+  if (kind === 'video' && /youtu/.test(el.url)) head.innerHTML = ICONS.play; else if (m.favicon && kind === 'video') { const i = h('img'); i.src = safeUrl(m.favicon, 'img'); i.onerror = () => i.replaceWith(h('span', '', ICONS.linkcard)); head.appendChild(i); } else head.innerHTML = ICONS.linkcard;
   head.appendChild(h('span', 'lk-url', esc(el.url)));
   const title = h('div', 'lk-title');
   const te = editableDiv('', esc(el.title || m.title || prettyHost(el.url)), 'Titolo', d => { el.title = d.textContent; touch(el); scheduleSave(); });
@@ -228,13 +233,13 @@ function linkBody(el, card, kind) {
   card.appendChild(meta);
 }
 BUILD.link = function (el, card) {
-  if (!el.url) return urlInput(card, ICONS.linkcard, 'Inserisci l\'URL di un link', v => { let u = v.trim(); if (!/^[a-z]+:\/\//i.test(u)) u = 'https://' + u; el.url = u; el.title = ''; rebuild(el); unfurlInto(el); });
+  if (!el.url) return urlInput(card, ICONS.linkcard, 'Inserisci l\'URL di un link', v => { let u = v.trim(); if (!/^[a-z]+:\/\//i.test(u)) u = 'https://' + u; el.url = u; el.title = ''; rebuild(el); commit(); unfurlInto(el); }); // l'URL è un passo annullabile, l'anteprima no
   if (!el.meta) { card.appendChild(h('div', 'lk-loading', 'Caricamento anteprima…')); unfurlInto(el); return; }
   linkBody(el, card, 'link');
 };
 BUILD.video = function (el, card) {
   if (!el.url && !el.fileId) {
-    urlInput(card, '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M10 9l5 3-5 3z"/></svg>', 'Incolla un link da YouTube o Vimeo', v => { let u = v.trim(); if (!/^[a-z]+:\/\//i.test(u)) u = 'https://' + u; el.url = u; rebuild(el); unfurlInto(el); });
+    urlInput(card, '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M10 9l5 3-5 3z"/></svg>', 'Incolla un link da YouTube o Vimeo', v => { let u = v.trim(); if (!/^[a-z]+:\/\//i.test(u)) u = 'https://' + u; el.url = u; rebuild(el); commit(); unfurlInto(el); });
     return;
   }
   if (el.fileId) { const fr = h('div', 'media-frame'); const v = h('video', 'no-drag'); v.controls = true; fileURL(el.fileId).then(u => v.src = u); fr.appendChild(v); card.appendChild(fr); const mt = h('div', 'lk-meta'); mt.innerHTML = `<div class="lk-head">${ICONS.play}<span class="lk-url"></span></div>`; $('.lk-url', mt).textContent = el.name || 'Video'; card.appendChild(mt); return; }
@@ -415,7 +420,7 @@ BUILD.document = function (el, card, node) {
   if (el.cardView) {
     node.classList.remove('iconview');
     const c = h('div', 'doc-card', `<div class="dt"></div><div class="dp rt"></div>`);
-    $('.dt', c).textContent = el.title || 'Nuovo documento'; $('.dp', c).innerHTML = sanitizeHtml(el.html || '');
+    $('.dt', c).textContent = el.title || 'Nuovo documento'; $('.dp', c).innerHTML = safeHtml(el.html);
     card.appendChild(c); return;
   }
   node.classList.add('iconview');
@@ -725,7 +730,7 @@ function onDblClick(ev) {
   if (el.type === 'document') return openDocument(el);
   if (el.type === 'sketch') return openSketch(el);
   if (el.type === 'image' && !ev.target.closest('.caption')) return openLightbox(el);
-  if (el.type === 'link' && el.url && !ev.target.closest('.lk-title')) return window.open(el.url, '_blank', 'noopener');
+  if (el.type === 'link' && el.url && !ev.target.closest('.lk-title')) return openUrl(el.url);
   if (el.type === 'drawing') return editDrawing(el);
   if (el.type === 'table') { const td = ev.target.closest('td'); if (td) { tEnter(el.id, +td.dataset.r, +td.dataset.c); tStartEdit(); } return; }
   if (el.type === 'note' || el.type === 'heading') { if (!editing) enterEdit(el, ev); return; }
@@ -1048,7 +1053,7 @@ function menuItems(m, ids, opts = {}) {
     sep();
   }
   if (single?.type === 'note') { item('Converti in documento', () => { single.type = 'document'; single.title = stripHtml(single.html).split('\n')[0].slice(0, 60) || 'Nuovo documento'; single.w = DEFAULT_W.document; single.cardView = false; rebuild(single); commit(); }); sep(); }
-  if (single?.type === 'link' && single.url) { item('Apri link', () => window.open(single.url, '_blank', 'noopener')); item('Aggiorna anteprima', () => { single.meta = null; rebuild(single); }); sep(); }
+  if (single?.type === 'link' && single.url) { item('Apri link', () => openUrl(single.url)); item('Aggiorna anteprima', () => { single.meta = null; rebuild(single); }); sep(); }
   if (single?.type === 'image' && single.fileId) { item('Apri immagine', () => openLightbox(single)); item('Scarica', () => downloadFile(single)); item('Sostituisci immagine', () => pickFiles('image/*', false, async f => { single.fileId = await storeFile(f[0]); single.name = f[0].name; rebuild(single); commit(); })); sep(); }
   if (single?.type === 'file') { item('Scarica', () => downloadFile(single)); sep(); }
   if (single?.type === 'column') { item(single.collapsed ? 'Espandi colonna' : 'Comprimi colonna', () => { single.collapsed = !single.collapsed; commit(); render(); }); sep(); }
@@ -1084,7 +1089,7 @@ const UNSORTED = '__unsorted';
 function ensureUnsorted() { if (!S.boards[UNSORTED]) S.boards[UNSORTED] = { id: UNSORTED, title: 'Non ordinati', parent: null, color: '#c4c6c8', hidden: true, created: Date.now() }; }
 function moveToUnsorted(ids) {
   ensureUnsorted();
-  ids.forEach(id => { const e = E(id); if (!e || e.type === 'line') return; if (e.col) { const c = E(e.col); if (c) c.items = c.items.filter(x => x !== id); e.col = null; } e.board = UNSORTED; e.z = nextZ(); if (e.type === 'column') e.items.forEach(ci => { const c = E(ci); if (c) c.board = UNSORTED; }); if (e.type === 'board' && S.boards[e.target]) S.boards[e.target].parent = UNSORTED; });
+  ids.forEach(id => { const e = E(id); if (!e || e.type === 'line') return; if (e.col) { const c = E(e.col); if (c) c.items = c.items.filter(x => x !== id); e.col = null; } e.board = UNSORTED; e.z = nextZ(); if (e.type === 'column') e.items.forEach(ci => { const c = E(ci); if (c) c.board = UNSORTED; }); if (e.type === 'board' && !e.shortcut && S.boards[e.target]) S.boards[e.target].parent = UNSORTED; });
   for (const l of boardEls()) if (l.type === 'line') { if (ids.includes(l.a)) l.a = null; if (ids.includes(l.b)) l.b = null; }
   sel.clear(); render(); commit(); renderUnsorted();
   toast(ids.length + (ids.length === 1 ? ' elemento spostato' : ' elementi spostati') + ' in Non ordinati', 'Annulla', undo);
@@ -1123,7 +1128,7 @@ function startUnsortedDrag(ev, el, node) {
     const p = toWorld(e.clientX - ox, e.clientY - oy);
     el.board = cur; el.x = Math.max(0, Math.round(p.x)); el.y = Math.max(0, Math.round(p.y)); el.z = nextZ();
     if (el.type === 'column') el.items.forEach(ci => { const c = E(ci); if (c) c.board = cur; });
-    if (el.type === 'board' && S.boards[el.target]) S.boards[el.target].parent = cur;
+    if (el.type === 'board' && !el.shortcut && S.boards[el.target]) S.boards[el.target].parent = cur;
     const t = columnAt(e.clientX, e.clientY); if (t && el.type !== 'column') insertIntoColumn([el.id], t.col, t.idx);
     sel.clear(); sel.add(el.id); render(); commit(); renderUnsorted();
   };
@@ -1152,7 +1157,8 @@ function drawToolbar(container, opts, { onUndo, onRedo, canUndo, canRedo, onCanc
   tb.appendChild(h('span', 'dt-sep'));
   const c = h('button', 'dt-txt', cancelLabel); c.onclick = onCancel; tb.appendChild(c);
   const s = h('button', 'dt-save', 'Salva'); s.disabled = !canSave(); s.onclick = onSave; tb.appendChild(s);
-  function refresh() { drawToolbar(container, opts, arguments.callee.args); }
+  // ridisegna la barra con lo strumento scelto (container._rerender è impostato da chi apre il disegno)
+  function refresh() { if (typeof container._rerender === 'function') container._rerender(); }
   refresh.args = null;
   function colorPop(x) {
     $$('.dt-pop').forEach(p => p.remove());
@@ -1252,7 +1258,7 @@ function openSketch(el) {
   const W = 800, H = 500;
   const state = { strokes: JSON.parse(JSON.stringify(el.strokes)), redo: [], selected: null };
   const opts = { ...drawOpts2, tool: 'pen' };
-  const modal = h('div', 'sk-modal'); const wrap = h('div', 'sk-canvas-wrap');
+  const modal = h('div', 'sk-modal'); modal.dataset.elId = el.id; const wrap = h('div', 'sk-canvas-wrap');
   const scale = Math.min(1.3, (innerWidth * .8) / W, (innerHeight - 180) / H);
   const ns = 'http://www.w3.org/2000/svg'; const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.style.cssText = `display:block;width:${W * scale}px;height:${H * scale}px;cursor:crosshair;touch-action:none`;
@@ -1283,17 +1289,17 @@ function drawKeys(e, opts, rer, surface, save) {
 /* ------------------------------ Documento ------------------------------ */
 function openDocument(el) {
   hidePopups(true);
-  const ov = $('#overlay'); ov.innerHTML = ''; ov.classList.remove('hidden');
+  const ov = $('#overlay'); ov.innerHTML = ''; ov.classList.remove('hidden'); ov.dataset.elId = el.id; // la sincronizzazione non sostituisce un elemento aperto qui
   const box = h('div', 'modal doc-modal');
   const head = h('div', 'dm-head'); const title = h('div', 'dm-title editable'); title.contentEditable = 'plaintext-only'; title.textContent = el.title || 'Nuovo documento';
   title.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); body.focus(); } };
   title.oninput = () => { el.title = title.textContent; touch(el); scheduleSave(); };
   const exp = h('button', 'hbtn dm-exp', 'Esporta <i class="chev"></i>');
-  exp.onclick = ev => { ev.stopPropagation(); popAt(exp, m => { const it = (l, fn) => { const d = h('div', 'mi', `<span>${l}</span>`); d.onclick = () => { closePops(); fn(); }; m.appendChild(d); }; it('Documento Word', () => saveBlob(new Blob([wordHtml(el.title, el.html)], { type: 'application/msword' }), (el.title || 'documento') + '.doc')); it('Markdown', () => saveBlob(new Blob(['# ' + (el.title || '') + '\n\n' + htmlToMd(el.html)], { type: 'text/markdown' }), (el.title || 'documento') + '.md')); it('Testo semplice', () => saveBlob(new Blob([(el.title || '') + '\n\n' + stripHtml(el.html)], { type: 'text/plain' }), (el.title || 'documento') + '.txt')); it('PDF (stampa)', () => { const w = window.open('', '_blank'); w.document.write(`<title>${esc(el.title)}</title><style>body{font-family:Inter,Helvetica,Arial;max-width:720px;margin:40px auto;line-height:1.6;color:#323b4a}h1{font-family:Georgia,serif}</style><h1>${esc(el.title)}</h1>${el.html}`); w.document.close(); w.print(); }); }, { below: true }); };
+  exp.onclick = ev => { ev.stopPropagation(); popAt(exp, m => { const it = (l, fn) => { const d = h('div', 'mi', `<span>${l}</span>`); d.onclick = () => { closePops(); fn(); }; m.appendChild(d); }; it('Documento Word', () => saveBlob(new Blob([wordHtml(el.title, safeHtml(el.html))], { type: 'application/msword' }), (el.title || 'documento') + '.doc')); it('Markdown', () => saveBlob(new Blob(['# ' + (el.title || '') + '\n\n' + htmlToMd(el.html)], { type: 'text/markdown' }), (el.title || 'documento') + '.md')); it('Testo semplice', () => saveBlob(new Blob([(el.title || '') + '\n\n' + stripHtml(el.html)], { type: 'text/plain' }), (el.title || 'documento') + '.txt')); it('PDF (stampa)', () => { const w = window.open('', '_blank'); w.document.write(`<title>${esc(el.title)}</title><style>body{font-family:Inter,Helvetica,Arial;max-width:720px;margin:40px auto;line-height:1.6;color:#323b4a}h1{font-family:Georgia,serif}</style><h1>${esc(el.title)}</h1>${safeHtml(el.html)}`); w.document.close(); w.print(); }); }, { below: true }); };
   const mx = h('button', 'mx', '✕'); mx.title = 'Chiudi (Esc)';
   head.append(title, exp); box.appendChild(mx);
   const main = h('div', 'dm-main'); const tools = h('div', 'dm-tools'); const sc = h('div', 'dm-scroll');
-  const body = h('div', 'doc-body editable rt'); body.contentEditable = 'true'; body.dataset.ph = 'Inizia a scrivere…'; body.innerHTML = el.html || '';
+  const body = h('div', 'doc-body editable rt'); body.contentEditable = 'true'; body.dataset.ph = 'Inizia a scrivere…'; body.innerHTML = safeHtml(el.html);
   body.oninput = () => { el.html = body.innerHTML; touch(el); scheduleSave(); };
   wireRichText(body, el);
   const st = c => { try { return document.queryCommandState(c); } catch { return false; } };
@@ -1481,7 +1487,7 @@ function searchPop() {
       res.slice(0, 100).forEach(x => {
         const r = h('div', 'prow'); r.style.cursor = 'pointer';
         if (x.kind === 'board') { r.innerHTML = `<span class="sq" style="width:16px;height:16px;border-radius:4px;background:${boardBg(x.b)}"></span><div class="pt"><b></b><small>${esc(S.boards[x.b.parent]?.title || '')}</small></div>`; $('b', r).innerHTML = hl(x.b.title, q); r.onclick = () => { closePops(); openBoard(x.b.id); }; }
-        else { r.innerHTML = `<span class="tag">${TYPE_LABEL[x.e.type]}</span><div class="pt"><b></b><small>${esc(x.e.board === UNSORTED ? 'Non ordinati' : S.boards[x.e.board]?.title || '')}</small></div>`; $('b', r).innerHTML = hl(snippet(x.t, q), q); r.onclick = () => { closePops(); if (x.e.board === UNSORTED) toggleUnsorted(true); else openBoard(x.e.board, x.e.id); }; }
+        else { r.innerHTML = `<span class="tag">${esc(TYPE_LABEL[x.e.type] || x.e.type)}</span><div class="pt"><b></b><small>${esc(x.e.board === UNSORTED ? 'Non ordinati' : S.boards[x.e.board]?.title || '')}</small></div>`; $('b', r).innerHTML = hl(snippet(x.t, q), q); r.onclick = () => { closePops(); if (x.e.board === UNSORTED) toggleUnsorted(true); else openBoard(x.e.board, x.e.id); }; }
         body.appendChild(r);
       });
     };

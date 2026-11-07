@@ -21,6 +21,8 @@ const Sync = (() => {
   let base = new Map();    // chiave → impronta dell'ultima versione sincronizzata
   let pushing = false, pushAgain = false, pullAfter = false, pushTimer = null, retryMs = 0, es = null;
   let status = 'local';    // local | ok | sync | offline | error
+  let connectGen = 0;      // ogni tentativo di collegamento ha un numero: uno superato (es. per timeout) non tocca più i dati
+  const deferred = new Map(); // modifiche arrivate per elementi che si stanno scrivendo: applicate quando si smette
 
   /* ------------------------------ utilità ------------------------------ */
   const json = v => JSON.stringify(v, (k, x) => (k && k[0] === '_' ? undefined : x)); // i campi "_…" sono temporanei
@@ -122,10 +124,15 @@ const Sync = (() => {
 
   /* ------------------------------ collegamento ------------------------------ */
   async function connect() {
-    me = await api('GET', '/api/board/me');
-    if (me.role !== 'human') { disconnect(); throw new Error('Serve un token da persona'); }
+    const gen = ++connectGen;
+    const who = await api('GET', '/api/board/me');
+    if (who.role !== 'human') { disconnect(); throw new Error('Serve un token da persona'); }
     const meta = await DB.get('kv', 'sync').catch(() => null);
     const server = await api('GET', '/api/lavagna');
+    if (gen !== connectGen) return false; // un tentativo più recente (o il timeout) ha preso il suo posto
+    me = who;
+    // se l'interfaccia è già attiva, si chiude prima la modifica in corso così il testo scritto entra nei dati
+    if (typeof blurEditing === 'function' && document.querySelector('#world .el')) blurEditing();
     const first = !meta || meta.user !== me.name;
     // modifiche fatte qui e non ancora sul server (al primo collegamento: tutto il contenuto locale)
     const prevBase = first ? new Map() : new Map(Object.entries(meta.base || {}));
@@ -149,6 +156,7 @@ const Sync = (() => {
     hist.stack = []; hist.idx = -1;
     listen(); chip(); setStatus('ok');
     schedulePush(50); processUploads();
+    return true;
   }
 
   function listen() {
@@ -196,12 +204,24 @@ const Sync = (() => {
     finally { pulling = false; if (pullAfter && !pushing) { pullAfter = false; pull(); } }
   }
 
+  // elementi che l'utente sta modificando adesso: nota o titolo con il cursore, cella di tabella, documento o schizzo aperti
+  function editingIds() {
+    const ids = new Set();
+    const n = document.activeElement?.closest?.('.el'); if (n?.dataset.id) ids.add(n.dataset.id);
+    if (typeof TBL !== 'undefined' && TBL.st?.editing) ids.add(TBL.st.id);
+    const ov = document.querySelector('#overlay:not(.hidden)[data-el-id]'); if (ov) ids.add(ov.dataset.elId);
+    const sk = document.querySelector('.sk-modal[data-el-id]'); if (sk) ids.add(sk.dataset.elId);
+    return ids;
+  }
   function applyRemote(changes) {
     const dirty = new Set(localChanges().map(c => c.k)); // ciò che è cambiato qui e non è ancora partito ha la precedenza
+    const editing = editingIds();
     const changedEls = new Set(); let structural = false;
     for (const { k, v } of changes) {
       if (k === 'm:seq') { if (v != null) { S.seq = Math.max(S.seq || 1, v); base.set(k, hash(json(v))); } continue; }
       if (dirty.has(k)) continue;
+      // non si sostituisce l'oggetto che l'editor aperto sta modificando: si applica quando l'utente ha finito
+      if (k[0] === 'e' && editing.has(k.slice(2))) { deferred.set(k, v); continue; }
       const t = k[0], id = k.slice(2);
       const coll = t === 'e' ? S.elements : t === 'b' ? S.boards : S.labels;
       if (v === null) { delete coll[id]; base.delete(k); } else { coll[id] = v; base.set(k, hash(json(v))); }
@@ -211,6 +231,20 @@ const Sync = (() => {
     saveLocal();
     refresh(changedEls, structural);
   }
+
+  // finita la modifica: se l'utente non ha cambiato l'elemento vale la versione arrivata, altrimenti vale la sua (che parte)
+  function flushDeferred() {
+    if (!deferred.size || !active) return;
+    const editing = editingIds();
+    const ready = [...deferred].filter(([k]) => !editing.has(k.slice(2)));
+    if (!ready.length) return;
+    for (const [k] of ready) deferred.delete(k);
+    const dirty = new Set(localChanges().map(c => c.k));
+    const apply = ready.filter(([k]) => !dirty.has(k)).map(([k, v]) => ({ k, v }));
+    if (apply.length) applyRemote(apply); else schedulePush(0);
+  }
+  document.addEventListener('focusout', () => setTimeout(flushDeferred, 0), true);
+  setInterval(flushDeferred, 2000); // documenti e schizzi si chiudono senza focusout
 
   function refresh(changedEls, structural) {
     if (!S.boards[cur]) { cur = 'home'; history.replaceState(null, '', '#/home'); structural = true; }
@@ -236,17 +270,28 @@ const Sync = (() => {
   let uploads = null; // id da caricare (salvati anche nel browser, per riprovare dopo un riavvio)
   async function loadQueue() { if (!uploads) uploads = new Set((await DB.get('kv', 'sync-uploads').catch(() => null)) || []); return uploads; }
   async function queueUpload(id) { (await loadQueue()).add(id); DB.put('kv', 'sync-uploads', [...uploads]).catch(() => { }); if (active) processUploads(); }
-  let uploading = false;
+  let uploading = false, uploadRetryMs = 0;
   async function processUploads() {
     if (!active || uploading) return; uploading = true;
+    let transient = false;
     try {
       for (const id of [...(await loadQueue())]) {
-        const blob = await DB.get('files', id).catch(() => null);
-        if (blob) await api('PUT', `/api/lavagna/files/${encodeURIComponent(id)}`, blob, true);
-        uploads.delete(id); DB.put('kv', 'sync-uploads', [...uploads]).catch(() => { });
+        try {
+          const blob = await DB.get('files', id).catch(() => null);
+          if (blob) await api('PUT', `/api/lavagna/files/${encodeURIComponent(id)}`, blob, true);
+          uploads.delete(id);
+        } catch (e) {
+          if (e.auth) return;
+          // rifiuto definitivo (troppo grande, non valido): si toglie dalla coda e si avvisa; gli altri file proseguono
+          if (e.status >= 400 && e.status < 500) { uploads.delete(id); toast(`Un file non è stato caricato sul server: ${e.message}`); }
+          else transient = true; // rete o server: si riprova più tardi, senza bloccare gli altri file
+        }
+        DB.put('kv', 'sync-uploads', [...uploads]).catch(() => { });
       }
-    } catch (e) { if (!e.auth) setTimeout(processUploads, 15000); }
-    finally { uploading = false; }
+    } finally {
+      uploading = false;
+      if (transient) { uploadRetryMs = Math.min(300000, uploadRetryMs ? uploadRetryMs * 2 : 15000); setTimeout(processUploads, uploadRetryMs); } else uploadRetryMs = 0;
+    }
   }
   async function fetchFile(id) {
     if (!active) return null;
@@ -272,7 +317,13 @@ const Sync = (() => {
     available = true;
     if (ls.get(TOKEN_KEY) && ls.get(MODE_KEY) !== 'local') {
       try { await Promise.race([connect(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))]); }
-      catch (e) { if (!e.auth) { setStatus('offline'); setTimeout(() => connect().then(() => fullRender()).catch(() => { }), 10000); } }
+      catch (e) {
+        if (e.auth) return;
+        connectGen++; // il tentativo lento, se finirà, non sostituirà più i dati: si riprova da capo
+        setStatus('offline');
+        const retry = (ms) => setTimeout(() => connect().then(ok => { if (ok) fullRender(); }).catch(x => { if (!x.auth) retry(Math.min(ms * 2, 60000)); }), ms);
+        retry(10000);
+      }
     }
   }
   // dopo l'avvio dell'interfaccia: icona e, se serve, richiesta di accesso
