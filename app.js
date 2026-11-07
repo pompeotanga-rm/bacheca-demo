@@ -1806,6 +1806,8 @@ async function init() {
     const p = toWorld(ev.clientX, ev.clientY); addElement('note', { x: Math.max(0, p.x - 20), y: Math.max(0, p.y - 20) });
   });
   VP().addEventListener('contextmenu', ev => {
+    // in a text field keep the system menu (on phones a long press is how you get "Paste")
+    if (ev.target.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]')) return;
     ev.preventDefault();
     const cell = ev.target.closest('.tbl td');
     const n = ev.target.closest('.line-svg') || ev.target.closest('.el');

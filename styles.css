@@ -175,6 +175,8 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 .map-frame { aspect-ratio: 4/3; background: #e7ecef; }
 .url-form { display: flex; align-items: center; gap: 10px; padding: 0 20px; height: 60px; }
 .url-form svg { width: 16px; height: 16px; color: var(--muted2); flex: none; }
+.url-paste { flex: none; border: 0; background: #f0f1f3; color: var(--ink); font: 500 12px var(--sans); padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+.url-paste:active { background: #e3e5e8; }
 .url-form input { flex: 1; border: 0; outline: none; background: none; font-size: 14px; color: var(--ink); user-select: text; min-width: 0; }
 .url-form input::placeholder { color: #b9bcc1; }
 

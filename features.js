@@ -249,6 +249,11 @@ function urlInput(card, icon, ph, onSubmit) {
   const i = $('input', f);
   i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter' && i.value.trim()) { e.preventDefault(); onSubmit(i.value); } if (e.key === 'Escape') i.blur(); });
   i.addEventListener('paste', e => { e.stopPropagation(); setTimeout(() => { if (/^(https?:\/\/|www\.|(m\.|music\.)?(youtube\.com|youtu\.be|vimeo\.com)\/)/i.test(i.value.trim())) onSubmit(i.value); }, 0); });
+  if (navigator.clipboard?.readText) { // one-tap paste, handy on phones
+    const pb = h('button', 'url-paste no-drag', 'Incolla'); pb.type = 'button';
+    pb.onclick = async e => { e.stopPropagation(); try { const t = (await navigator.clipboard.readText()).trim(); if (t) { i.value = t; onSubmit(t); } else toast('Gli appunti sono vuoti'); } catch { toast('Permesso negato: tieni premuto nel campo e scegli Incolla'); i.focus(); } };
+    f.appendChild(pb);
+  }
   card.appendChild(f);
 }
 
