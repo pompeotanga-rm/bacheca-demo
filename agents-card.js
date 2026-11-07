@@ -112,6 +112,8 @@
     reset() { ls.set(DEMO_KEY, null); notify(); },
     connect() { },
   };
+  // chiave cambiata da questa pagina (Accessi): il tempo reale si riapre con la chiave nuova
+  addEventListener('bacheca-token-changed', () => { if (server.es) { server.es.close(); server.es = null; } authFailed = false; if (source === server) server.connect(); notify(); });
   // modifiche fatte in un'altra scheda dello stesso browser (demo)
   addEventListener('storage', e => { if (e.key === DEMO_KEY || e.key === TOKEN_KEY) notify(); });
 
@@ -371,8 +373,8 @@
         if (src.kind === 'server') {
           const c = await server.call('POST', '/api/board/cards', t);
           ov.remove(); cache = null; notify();
-          const bid = 'p-' + (c.project ? c.project.replace(/[^A-Za-z0-9_-]/g, '_') : 'none');
-          toast(`Compito ${c.id} creato${c.assignee ? ` per ${c.assignee}` : ''} nella board «${c.project || 'senza progetto'}»`, cur !== bid ? 'Apri' : null, () => { if (S.boards[bid]) openBoard(bid); });
+          const bid = Object.values(S.boards).find(b => b.agentProject !== undefined && (b.agentProject || null) === (c.project || null))?.id; // la board del progetto (arriva dalla lavagna)
+          toast(`Compito ${c.id} creato${c.assignee ? ` per ${c.assignee}` : ''} nella board «${c.project || 'senza progetto'}»`, bid && cur !== bid ? 'Apri' : null, () => { const b2 = bid || Object.values(S.boards).find(b => (b.agentProject || null) === (c.project || null) && b.agentProject !== undefined)?.id; if (b2 && S.boards[b2]) openBoard(b2); });
         } else {
           const c = await demo.createTask(t);
           makeEl('agentcard', at?.x ?? 40, at?.y ?? 40, { cardId: c.id }); render(); commit();

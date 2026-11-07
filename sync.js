@@ -333,6 +333,8 @@ const Sync = (() => {
     if (!active && !ls.get(TOKEN_KEY)) askLogin(false);
   }
 
+  // chiave cambiata da questa pagina (es. rigenerata in Accessi): ci si ricollega con quella nuova
+  addEventListener('bacheca-token-changed', () => { if (active) { listen(); pull(); } });
   addEventListener('online', () => { if (active) { pull(); schedulePush(0); processUploads(); } });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { if (active) push(); } else if (active) pull(); });
 

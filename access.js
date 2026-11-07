@@ -171,7 +171,8 @@ const Access = (() => {
     if (!confirm(`Creare una nuova chiave per ${a.name}? Quella attuale smette subito di funzionare.`)) return;
     try {
       const r = await api('POST', `/api/board/actors/${a.name}/rotate`);
-      const self = a.name === data.me; if (self) ls.set(TOKEN_KEY, r.token);
+      const self = a.name === data.me;
+      if (self) { ls.set(TOKEN_KEY, r.token); dispatchEvent(new Event('bacheca-token-changed')); } // lavagna e riquadro si ricollegano con la chiave nuova
       showToken(a.name, r.token, a.role, self);
     } catch (e) { toast(e.message); }
   }

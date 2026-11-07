@@ -14,8 +14,11 @@
     // (sugli elementi SVG il browser ignora touch-action, quindi lo si ferma qui)
     if (e.touches.length === 1 && e.target.closest?.('.line-svg.selected, .lh')) { e.preventDefault(); return; }
     if (e.touches.length !== 2 || typeof setZoom !== 'function') return;
+    // se il primo dito sta già spostando, ridimensionando o curvando qualcosa, quel gesto continua fino in fondo
+    // (interromperlo lascerebbe la posizione non salvata): niente zoom finché non finisce
+    if (typeof drag !== 'undefined' && drag && drag.kind !== 'pending') return;
     e.preventDefault();
-    if (typeof drag !== 'undefined' && drag) drag = null; // il primo dito poteva aver iniziato a spostare una card
+    if (typeof drag !== 'undefined' && drag) drag = null; // solo un tocco non ancora diventato spostamento
     document.body.classList.remove('dragging');
     const m = mid(e.touches);
     g = { d: dist(e.touches), z: zoom, w: toWorld(m.x, m.y) };
