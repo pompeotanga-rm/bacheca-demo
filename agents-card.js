@@ -7,6 +7,7 @@
 'use strict';
 (() => {
   DEFAULT_W.agents = 338; RESIZABLE.add('agents'); TYPE_LABEL.agents = 'Agenti';
+  DEFAULT_W.agentcard = 300; RESIZABLE.add('agentcard'); TYPE_LABEL.agentcard = 'Card agente';
   if (typeof TIPS === 'object') TIPS.agents = ['Il riquadro Agenti mostra dal vivo il lavoro degli agenti', 'Approva o rifiuta senza lasciare la lavagna'];
 
   const SECTIONS = [['review', 'Da approvare'], ['doing', 'In corso'], ['blocked', 'Bloccate'], ['todo', 'Da fare'], ['done', 'Fatte']];
@@ -117,27 +118,44 @@
   // Nella demo senza server aggiunge una volta sola la board "Prova agenti" già pronta, accanto alle board
   // esistenti (che non vengono toccate), così l'esempio si vede subito senza cercarlo nei menu.
   const DEMO_BOARD_KEY = 'bacheca-demo-board-v1';
-  ready.then(src => { if (src.kind === 'demo' && !ls.get(DEMO_BOARD_KEY)) seedDemoBoard(); });
+  const DEMO_BOARD_KEY2 = 'bacheca-demo-board-v2'; // seconda parte: le card degli agenti come elementi della lavagna
+  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2))) seedDemoBoard(); });
   async function seedDemoBoard() {
     for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
-    if (!S || ls.get(DEMO_BOARD_KEY)) return;
-    ls.set(DEMO_BOARD_KEY, '1');
-    const prev = cur; cur = 'home';
-    const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
-    const y = home.length ? Math.max(...home.map(e => e.y)) + 170 : 60;
-    const bel = makeEl('board', 40, y, { title: 'Prova agenti' });
-    const b = S.boards[bel.target];
-    if (typeof autoBoardLook === 'function') autoBoardLook(b);
-    b.color = '#d9cff7'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🤖' };
-    const bid = b.id;
-    makeEl('heading', 20, 20, { board: bid, w: 338, html: 'Agenti sulla lavagna' });
-    makeEl('note', 20, 110, { board: bid, w: 338, html: 'Tocca <b>Simula un agente</b> qui sotto: compare una proposta in “Da approvare”. Poi tocca <b>Approva</b> o <b>Rifiuta</b>, oppure il titolo di una card per leggerla e scrivere all\'agente.' });
-    makeEl('agents', 20, 270, { board: bid, project: '*' });
-    makeEl('note', 390, 110, { board: bid, w: 300, html: '<b>Come funziona davvero</b><br>Qui i dati sono di esempio e restano su questo dispositivo.<br><br>Con il server (<i>node server.js</i>) la lavagna è la stessa su telefono e computer, e in questo riquadro compare il lavoro reale di Claude Code e Codex: le loro proposte arrivano da approvare, tu decidi da qui.<br><br>Accanto puoi tenere i tuoi appunti, schemi e link, come in qualsiasi board.' });
-    cur = prev;
+    if (!S) return;
+    let bid = null, opened = false;
+    if (!ls.get(DEMO_BOARD_KEY)) {
+      ls.set(DEMO_BOARD_KEY, '1');
+      const prev = cur; cur = 'home';
+      const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+      const y = home.length ? Math.max(...home.map(e => e.y)) + 170 : 60;
+      const bel = makeEl('board', 40, y, { title: 'Prova agenti' });
+      const b = S.boards[bel.target];
+      if (typeof autoBoardLook === 'function') autoBoardLook(b);
+      b.color = '#d9cff7'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🤖' };
+      bid = b.id;
+      makeEl('heading', 20, 20, { board: bid, w: 338, html: 'Agenti sulla lavagna' });
+      makeEl('note', 20, 110, { board: bid, w: 338, html: 'Tocca <b>Simula un agente</b> qui sotto: compare una proposta in “Da approvare”. Poi tocca <b>Approva</b> o <b>Rifiuta</b>, oppure il titolo di una card per leggerla e scrivere all\'agente.' });
+      makeEl('agents', 20, 270, { board: bid, project: '*' });
+      makeEl('note', 390, 110, { board: bid, w: 300, html: '<b>Come funziona davvero</b><br>Qui i dati sono di esempio e restano su questo dispositivo.<br><br>Con il server (<i>node server.js</i>) la lavagna è la stessa su telefono e computer, e in questo riquadro compare il lavoro reale di Claude Code e Codex: le loro proposte arrivano da approvare, tu decidi da qui.<br><br>Accanto puoi tenere i tuoi appunti, schemi e link, come in qualsiasi board.' });
+      cur = prev; opened = true;
+    }
+    if (!ls.get(DEMO_BOARD_KEY2)) {
+      ls.set(DEMO_BOARD_KEY2, '1');
+      bid = bid || Object.values(S.boards).find(b => b.title === 'Prova agenti')?.id;
+      if (bid) {
+        // con il server queste card e la nota le crea lo spazio agenti nella board del progetto
+        makeEl('heading', 730, 20, { board: bid, w: 640, html: 'Le card degli agenti, sulla lavagna' });
+        makeEl('agentcard', 730, 110, { board: bid, cardId: 'C1' });
+        makeEl('agentcard', 730, 380, { board: bid, cardId: 'C4' });
+        makeEl('agentcard', 1060, 110, { board: bid, cardId: 'C2' });
+        const n = makeEl('note', 1060, 380, { board: bid, w: 300, agentAuthor: 'claude-code', agentSession: '78a6',
+          html: '<h2>Rapporto backup di stanotte</h2><p>Job completati: 14 su 16.</p><p>Falliti: vm-104 e vm-117, datastore local-zfs al 94%.</p><p>Ho aperto la card C1 con la proposta di spostare i backup vecchi: aspetta la tua approvazione.</p>' });
+        void n;
+      }
+    }
     commit();
-    openBoard(bid);
-    toast('Ho aggiunto la board «Prova agenti» con un esempio da provare');
+    if (bid) { openBoard(bid); toast(opened ? 'Ho aggiunto la board «Prova agenti» con un esempio da provare' : 'Novità nella board «Prova agenti»: le card degli agenti sono anche sulla lavagna'); }
   }
 
   function getData(project) {
@@ -163,6 +181,38 @@
     // primo disegno appena il nodo è nella pagina
     requestAnimationFrame(refresh);
   };
+
+  /* ------------------------------ Singola card sulla lavagna ------------------------------ */
+  // Elemento creato dal server nella board del progetto: mostra dal vivo una card dello spazio agenti.
+  // La lavagna conserva solo posizione e dimensioni; contenuto, stato e commenti arrivano dalla card vera.
+  const STATUS_LABEL = Object.fromEntries(SECTIONS);
+  BUILD.agentcard = function (el, card) {
+    const box = mk('div', 'agc');
+    card.appendChild(box);
+    const refresh = () => { if (!box.isConnected) { listeners.delete(refresh); return; } drawCard(el, box, refresh); };
+    listeners.add(refresh);
+    requestAnimationFrame(refresh);
+  };
+  async function drawCard(el, box, refresh) {
+    let src, c = null, err = null;
+    try {
+      src = await ready;
+      if (!(src.kind === 'server' && (!src.hasToken() || authFailed))) c = (await getData('*')).cards.find(x => x.id === el.cardId) || null;
+    } catch (e) { err = e; if (e.auth) authFailed = true; }
+    if (!box.isConnected) return;
+    if (box.contains(document.activeElement) && document.activeElement.matches('input, textarea')) return;
+    box.replaceChildren();
+    if (!c) {
+      const msg = src?.kind === 'server' && (!src.hasToken() || authFailed) ? 'Collega lo spazio agenti (riquadro Agenti o agenti.html) per vedere questa card.'
+        : err ? `Impossibile leggere la card: ${err.message}` : `La card ${el.cardId} non esiste più (archiviata).`;
+      box.append(mk('div', 'agx-note', msg)); return;
+    }
+    const top = mk('div', 'agc-top');
+    top.append(mk('span', `agc-st agc-st-${c.status}`, STATUS_LABEL[c.status] || c.status));
+    if (c.needsApproval && c.status !== 'done') top.append(mk('span', 'agx-tag', 'richiede approvazione'));
+    if (src.kind === 'demo') top.append(mk('span', 'agx-demo', 'esempio'));
+    box.append(top, row(c, { project: 'x' }, src, refresh)); // il progetto è già quello della board
+  }
 
   async function draw(el, box, refresh) {
     let src, data, err = null;

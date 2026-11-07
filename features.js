@@ -191,6 +191,9 @@ function applyDecor(el) {
 
 /* ------------------------------ Builder card ------------------------------ */
 BUILD.note = function (el, card) {
+  if (el.agentAuthor) { // nota scritta da un agente (post_note): si vede chi l'ha scritta
+    const by = h('div', 'agent-by'); by.textContent = `🤖 ${el.agentAuthor}${el.agentSession ? ' · ' + el.agentSession : ''} · ${relTime(el.created)}`; by.title = 'Nota scritta da un agente'; card.appendChild(by);
+  }
   const t = editableDiv('text rt', el.html, 'Inizia a scrivere…', d => { el.html = d.innerHTML; touch(el); scheduleSave(); });
   wireRichText(t, el);
   card.appendChild(t);

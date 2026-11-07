@@ -748,3 +748,17 @@ body.dark .agx-row, body.dark .agx-body { background: rgba(255,255,255,.05); }
 .sync-go:disabled { opacity: .5; }
 .sync-local { background: none; color: var(--muted); }
 body.dark .sync-box { background: #262b34; }
+
+/* ------------------------------ Card degli agenti sulla lavagna ------------------------------ */
+.el-agentcard > .card { padding: 12px 14px; }
+.agc { display: grid; gap: 6px; font-size: 13px; }
+.agc .agx-row { background: none; padding: 0; box-shadow: none !important; }
+.agc-top { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.agc-st { font-size: 11px; font-weight: 600; border-radius: 10px; padding: 1px 8px; background: rgba(0,0,0,.06); color: var(--ink2); }
+.agc-st-review { background: #fff4e5; color: #8a5a00; }
+.agc-st-doing { background: #e9effe; color: #2f63f7; }
+.agc-st-blocked { background: #fdecea; color: #d93a2f; }
+.agc-st-done { background: #e7f6eb; color: #2e9b48; }
+.el-agentcard:has(.agc-st-review) > .card { box-shadow: 0 0 0 2px #f3dfbf, var(--card-shadow); }
+.agent-by { font-size: 11px; font-weight: 600; color: #6b4fd8; background: #f1edfd; padding: 6px 24px; border-bottom: 1px solid rgba(107,79,216,.12); }
+body.dark .agent-by { background: rgba(107,79,216,.18); color: #c9bbff; }
