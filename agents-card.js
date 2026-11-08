@@ -450,6 +450,9 @@
   // La persona scrive il compito sulla lavagna e sceglie progetto e agente: solo quell'agente potrà
   // prenderlo. L'agente lo trova alla sua prossima sessione (board_overview mostra i compiti assegnati).
   async function openTaskForm(at) {
+    // con un elemento selezionato, il compito nasce da lì: la card compare accanto e una freccia li collega
+    const fromEl = typeof sel !== 'undefined' && sel.size === 1 ? S.elements[[...sel][0]] : null;
+    const nearEl = fromEl && !fromEl.deleted && !['line', 'agentcard', 'agents'].includes(fromEl.type) ? fromEl : null;
     const src = await ready;
     if (src.kind === 'server' && !src.hasToken()) return toast('Prima collega lo spazio agenti con la tua chiave (riquadro Agenti o Accessi)');
     let agents = ['claude-code', 'codex'], projects = [];
@@ -482,7 +485,7 @@
     box.addEventListener('keydown', e => e.stopPropagation());
     box.onsubmit = async e => {
       e.preventDefault(); err.textContent = ''; go.disabled = true;
-      const t = { title: title.value.trim(), body: body.value, project: projIn.value.trim().toLowerCase() || null, assignee: who.value || null, priority: pri.value, needsApproval: appr.checked };
+      const t = { title: title.value.trim(), body: body.value, project: projIn.value.trim().toLowerCase() || null, assignee: who.value || null, priority: pri.value, needsApproval: appr.checked, ...(nearEl ? { near: nearEl.id } : {}) };
       try {
         if (src.kind === 'server') {
           const c = await server.call('POST', '/api/board/cards', t);
@@ -491,7 +494,10 @@
           toast(`Compito ${c.id} creato${c.assignee ? ` per ${c.assignee}` : ''} nella board «${c.project || 'senza progetto'}»`, bid && cur !== bid ? 'Apri' : null, () => { const b2 = bid || Object.values(S.boards).find(b => (b.agentProject || null) === (c.project || null) && b.agentProject !== undefined)?.id; if (b2 && S.boards[b2]) openBoard(b2); });
         } else {
           const c = await demo.createTask(t);
-          makeEl('agentcard', at?.x ?? 40, at?.y ?? 40, { cardId: c.id }); render(); commit();
+          const nx = nearEl ? (nearEl.x + (nearEl.w || 260) + 40) : at?.x ?? 40, ny = nearEl ? nearEl.y : at?.y ?? 40;
+          const ac = makeEl('agentcard', nx, ny, { cardId: c.id });
+          if (nearEl) makeEl('line', 0, 0, { x1: 0, y1: 0, x2: 0, y2: 0, a: nearEl.id, b: ac.id, bx: 0, by: 0, arrowEnd: true, dash: true, width: 1.5, color: '#6d83d8', label: 'compito' });
+          render(); commit();
           ov.remove(); toast(`Compito ${c.id} creato${c.assignee ? ` per ${c.assignee}` : ''} (esempio: nessun agente vero lo eseguirà)`);
         }
       } catch (x) { err.textContent = x.message; go.disabled = false; }

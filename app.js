@@ -451,7 +451,7 @@ const BUILD = {
     const box = h('div', 'comment');
     el.thread.forEach((m, i) => {
       const c = h('div', 'cm');
-      c.innerHTML = `<div class="av">${esc(m.author[0])}</div><div style="flex:1;min-width:0"><div class="meta"><b>${esc(m.author)}</b>${fmtDate(m.ts)}<button class="del no-drag">elimina</button></div><div class="body">${esc(m.text).replace(/\n/g, '<br>')}</div></div>`;
+      c.innerHTML = `<div class="av">${esc(m.author[0])}</div><div style="flex:1;min-width:0"><div class="meta"><b>${m.agent ? '🤖 ' : ''}${esc(m.author)}</b>${fmtDate(m.ts)}<button class="del no-drag">elimina</button></div><div class="body">${esc(m.text).replace(/\n/g, '<br>')}</div></div>`;
       $('.del', c).onclick = () => { el.thread.splice(i, 1); touch(el); rebuild(el); commit(); };
       box.appendChild(c);
     });

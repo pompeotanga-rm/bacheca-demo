@@ -463,7 +463,8 @@ BUILD.comment = function (el, card) {
   el.thread.forEach((m, i) => {
     const c = h('div', 'cm');
     c.innerHTML = `<div class="av">${esc(initials(m.author))}</div><div class="details"><div class="meta"><b></b><span class="when">${relTime(m.ts)}</span>${m.author === PROFILE.name ? '<button class="edit no-drag">Modifica</button>' : ''}</div><div class="body"></div></div>`;
-    $('.meta b', c).textContent = m.author; $('.body', c).textContent = m.text;
+    $('.meta b', c).textContent = (m.agent ? '🤖 ' : '') + m.author; $('.body', c).textContent = m.text; // 🤖: scritto da un agente (comment_element)
+    if (m.agent) c.classList.add('cm-agent');
     if (PROFILE.avatar && m.author === PROFILE.name) $('.av', c).style.backgroundImage = `url(${PROFILE.avatar})`;
     $('.edit', c)?.addEventListener('click', () => {
       const body = $('.body', c); body.contentEditable = 'plaintext-only'; body.classList.add('editable', 'no-drag'); focusEnd(body);
