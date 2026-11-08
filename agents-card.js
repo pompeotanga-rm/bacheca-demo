@@ -133,6 +133,8 @@
   const SCHEMA_TITLE = 'Schema disegnato da un agente';
   const DEMO_BOARD_KEY4 = 'bacheca-demo-board-v7'; // esperimento: 4 agenti insieme (dati in demo-esperimento.json e demo-esperimento-2.json)
   const EXP_TITLE = 'Esperimento: 4 agenti insieme';
+  const DEMO_BOARD_KEY5 = 'bacheca-demo-board-v8'; // laboratorio di idee sulla lavagna + prova reale (dati in demo-laboratorio.json)
+  const LAB_TITLE = 'Laboratorio: la lavagna migliore';
   const AGENT_COLORS = { architetto: '#ffffff', sicurezza: '#fde2e4', operativo: '#dff3e3', futuro: '#dcecfb' };
   const sig = { agentAuthor: 'claude-code', agentSession: 'f997' };
   const DEMO_SCHEMA = [
@@ -148,7 +150,7 @@
     { id: 'l3', type: 'line', a: 'srv', b: 'brd', label: 'compiti', ...sig },
     { id: 'l4', type: 'line', a: 'srv', b: 'lav', label: 'disegni', ...sig },
   ];
-  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4))) seedDemoBoard(); });
+  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5))) seedDemoBoard(); });
   async function seedDemoBoard() {
     for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
     if (!S) return;
@@ -269,8 +271,64 @@
         cur = prev;
       }
     }
+    // quinta parte: il laboratorio di idee sull'applicazione (3 agenti, 4 giri) e la prova reale che ne è seguita
+    let labBid = null;
+    if (!ls.get(DEMO_BOARD_KEY5)) {
+      let data = null;
+      try { const r = await fetch('demo-laboratorio.json', { cache: 'no-cache' }); if (r.ok) data = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (data && data.lab && Array.isArray(data.prova)) {
+        ls.set(DEMO_BOARD_KEY5, '1');
+        const prev = cur; cur = 'home';
+        const oldLab = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === LAB_TITLE);
+        if (oldLab) { // già presente: la svuota (anche le sotto-board) e la riempie di nuovo, senza doppioni
+          labBid = oldLab.target;
+          const subs = new Set(Object.values(S.boards).filter(x => x.parent === labBid).map(x => x.id));
+          for (const e of Object.values(S.elements)) if (e.board === labBid || subs.has(e.board)) delete S.elements[e.id];
+          for (const x of subs) delete S.boards[x];
+        } else {
+          const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+          const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === EXP_TITLE);
+          const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: LAB_TITLE });
+          const b = S.boards[bel.target]; b.color = '#cfe8ff'; b.colorSet = true; b.icon = { type: 'emoji', ch: '💡' }; b.named = true;
+          labBid = b.id;
+        }
+        const copy = (list, bid, dx, dy) => { // copia fedele con id nuovi (colonne, frecce e discussioni restano collegate)
+          const ids = {}; for (const e of list) ids[e.id] = uid();
+          for (const e of list) {
+            const { id, type, x = 0, y = 0, ...rest } = e;
+            const extra = { ...rest, board: bid, agentSession: e.agentAuthor ? e.agentAuthor.slice(0, 4) : undefined };
+            if (type === 'line') Object.assign(extra, { x1: 0, y1: 0, x2: 0, y2: 0, a: ids[e.a], b: ids[e.b], bx: 0, by: 0 });
+            if (rest.col) extra.col = ids[rest.col] || null;
+            const el = makeEl(type, type === 'line' ? 0 : x + dx, type === 'line' ? 0 : y + dy, extra);
+            delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el;
+            if (type === 'column') el.items = (e.items || []).map(i => ids[i]).filter(Boolean);
+            if (type === 'comment') el.thread = (e.thread || []).map(m => ({ ...m }));
+          }
+        };
+        cur = labBid;
+        const col = (x, w, title, notes) => { const c = makeEl('column', x, 40, { board: labBid, w, title }); for (const n of notes) { const el = makeEl(n.type || 'note', 0, 0, { board: labBid, w: w - 20, ...n }); el.col = c.id; c.items.push(el.id); } return c; };
+        const Y = '#fff6d6';
+        const lead = col(40, 400, '📖 Leggi prima', [
+          { color: Y, html: '<p><b>💡 Cosa è successo</b></p><p>Tre agenti Claude Code (visionario, prototipatore, valutatore) hanno lavorato in 4 giri, circa 17 minuti, su una domanda sola: <b>come deve essere una lavagna in cui persone e agenti pensano, disegnano e comunicano insieme? Cosa manca a Bacheca?</b></p><p>Il visionario proponeva idee, il prototipatore le simulava sulla lavagna con gli strumenti di oggi, il valutatore le votava per impatto. A ogni giro ripartivano senza memoria, leggendo la bacheca.</p>' },
+          { color: Y, html: '<p><b>🏆 La classifica del valutatore</b></p><ol><li><b>Discussione sul punto</b> (commenti attaccati a un elemento) — 5/5</li><li><b>Dallo schema al compito</b> (il compito nasce accanto alla nota) — 4/5</li><li><b>Chi sta guardando cosa</b> (presenza) — 4/5</li><li><b>Leggimi in ordine</b> (racconto da telefono) — 3/5</li><li><b>Pennarello per gli agenti</b> (forme vere) — 3/5</li><li>Modelli di board — 2/5</li></ol>' },
+          { html: data.lab.visione },
+          { color: '#e3f6e8', html: '<p><b>✅ Cosa è stato fatto dopo</b></p><ul><li>Le card dei compiti non coprono più sezioni e note (difetto C7).</li><li>Gli agenti commentano un punto preciso dello schema con <i>comment_element</i>, nello stesso filo delle persone (idea 1).</li><li>Un compito creato da un elemento nasce sotto di lui, collegato da una freccia «compito» (idea 2).</li></ul><p>Provato con Claude Code vero: apri la board <b>«Prova reale»</b> qui sotto.</p>' },
+          { html: data.lab.difetto },
+        ]);
+        col(480, 400, '💡 Le idee, con prove e voti', data.lab.ideas);
+        copy(data.lab.agents, labBid, 920, 40); // le sezioni degli agenti, come le hanno disegnate
+        const sub = makeEl('board', 0, 0, { board: labBid, title: 'Prova reale: discussione sullo schema' });
+        sub.col = lead.id; lead.items.push(sub.id);
+        const sb = S.boards[sub.target]; sb.color = '#e8f0ff'; sb.colorSet = true; sb.icon = { type: 'emoji', ch: '💬' }; sb.named = true;
+        cur = sb.id;
+        copy(data.prova, sb.id, 0, 140);
+        makeEl('note', 1140, 140, { board: sb.id, w: 420, color: Y, html: '<p><b>💬 La prova, passo per passo</b></p><ol><li>Una persona disegna lo schema di un\'app (qui a sinistra).</li><li>Claude Code lo guarda, trova il punto debole («Offline ?») e ci attacca una domanda; crea il compito collegato a quel nodo.</li><li>La persona risponde dal browser, nello stesso commento.</li><li>Claude Code, in una sessione nuova e senza memoria, vede «risposta per te», risponde nello stesso punto e aggiorna il compito.</li></ol><p>Il compito qui è una nota che ne riporta il contenuto: nella demo non c\'è il server.</p>' });
+        cur = prev;
+      }
+    }
     commit();
-    if (expBid && !opened) { openBoard(expBid); requestAnimationFrame(() => { /* una colonna per volta, leggibile anche dal telefono, partendo da «Leggi prima» */ setZoom(Math.min(1, VP().clientWidth / 440)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: l\u2019esperimento con 4 agenti, nella board «' + EXP_TITLE + '»'); }
+    if (labBid && !opened) { openBoard(labBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il laboratorio di idee sulla lavagna, nella board «' + LAB_TITLE + '»'); }
+    else if (expBid && !opened) { openBoard(expBid); requestAnimationFrame(() => { /* una colonna per volta, leggibile anche dal telefono, partendo da «Leggi prima» */ setZoom(Math.min(1, VP().clientWidth / 440)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: l\u2019esperimento con 4 agenti, nella board «' + EXP_TITLE + '»'); }
     else if (schemaBid && !opened) { openBoard(schemaBid); requestAnimationFrame(() => typeof zoomToFit === 'function' && zoomToFit()); toast('Novità: lo schema disegnato da un agente, nella board «Schema disegnato da un agente»'); }
     else if (bid) { openBoard(bid); toast(opened ? 'Ho aggiunto la board «Prova agenti» con un esempio da provare' : 'Novità nella board «Prova agenti»: le card degli agenti sono anche sulla lavagna'); }
   }
