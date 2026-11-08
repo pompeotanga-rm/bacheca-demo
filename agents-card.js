@@ -139,6 +139,8 @@
   const START_TITLE = 'Startup in 10 minuti (simulazione)';
   const DEMO_BOARD_KEY7 = 'bacheca-demo-board-v10'; // startup fondata da 5 agenti da soli, con ricerca web (dati in demo-startup2.json)
   const FOUND_TITLE = 'Startup fondata dagli agenti';
+  const DEMO_BOARD_KEY8 = 'bacheca-demo-board-v11'; // startup gestita da agenti, con regola di coordinamento (dati in demo-startup3.json)
+  const AUTO_TITLE = 'Startup gestita da agenti AI';
   const AGENT_COLORS = { architetto: '#ffffff', sicurezza: '#fde2e4', operativo: '#dff3e3', futuro: '#dcecfb' };
   const sig = { agentAuthor: 'claude-code', agentSession: 'f997' };
   const DEMO_SCHEMA = [
@@ -154,7 +156,7 @@
     { id: 'l3', type: 'line', a: 'srv', b: 'brd', label: 'compiti', ...sig },
     { id: 'l4', type: 'line', a: 'srv', b: 'lav', label: 'disegni', ...sig },
   ];
-  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6) || !ls.get(DEMO_BOARD_KEY7))) seedDemoBoard(); });
+  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6) || !ls.get(DEMO_BOARD_KEY7) || !ls.get(DEMO_BOARD_KEY8))) seedDemoBoard(); });
   async function seedDemoBoard() {
     for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
     if (!S) return;
@@ -422,8 +424,59 @@
         cur = prev;
       }
     }
+    // ottava parte: startup gestita da agenti (nessuna assunzione), con una regola minima di coordinamento
+    let autoBid = null;
+    if (!ls.get(DEMO_BOARD_KEY8)) {
+      let d = null;
+      try { const r = await fetch('demo-startup3.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (d && Array.isArray(d.sezioni)) {
+        ls.set(DEMO_BOARD_KEY8, '1');
+        const prev = cur; cur = 'home';
+        const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === AUTO_TITLE);
+        if (old) {
+          autoBid = old.target;
+          const subs = new Set(Object.values(S.boards).filter(x => x.parent === autoBid).map(x => x.id));
+          for (const e of Object.values(S.elements)) if (e.board === autoBid || subs.has(e.board)) delete S.elements[e.id];
+          for (const x of subs) delete S.boards[x];
+        } else {
+          const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+          const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === FOUND_TITLE);
+          const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: AUTO_TITLE });
+          const b = S.boards[bel.target]; b.color = '#dfe7ff'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🤖' }; b.named = true;
+          autoBid = b.id;
+        }
+        cur = autoBid;
+        const col = (bid, x, w, title, notes) => { const c = makeEl('column', x, 40, { board: bid, w, title }); for (const n of notes) { const el = makeEl('note', 0, 0, { board: bid, w: w - 20, ...n }); el.col = c.id; c.items.push(el.id); } return c; };
+        const Y = '#fff6d6';
+        const lead = col(autoBid, 40, 400, '📖 Leggi prima', [
+          { color: Y, html: '<p><b>🤖 Cosa è successo</b></p><p>Stessi 5 agenti, nuovo obiettivo: «una startup semplice e redditizia in poco tempo, <b>gestita da agenti AI e non da persone assunte</b>». La persona interviene solo per legge e sicurezza. Ricerca sul web, nessun ruolo imposto.</p><p>Una sola novità rispetto al test prima: <b>una regola di coordinamento</b> (chi trova la bacheca vuota apre la card «PIANO», gli altri commentano invece di creare doppioni) e partenze scaglionate di 45 s.</p><p>In <b>3 giri, 16 minuti</b>: 9 card, 28 messaggi, 5 sezioni sulla lavagna. Costo circa 11,60 $.</p>' },
+          { color: Y, html: '<p><b>📊 Prima e dopo la regola</b></p><ul><li>Card: <b>34 → 9</b></li><li>Idee in parallelo nel primo giro: <b>5 → 1</b>, scelta già nel giro 1</li><li>Doppioni: <b>1</b> (due «PIANO» a pochi secondi l\'uno dall\'altro, chiuso da soli: «race condition di avvio»)</li><li>Ognuno ha preso una parte: rischi, numeri, organigramma, traffico, presentazione.</li></ul>' },
+          { color: Y, html: '<p><b>💡 L\'idea</b></p><p>Un <b>negozio di modelli Notion</b> (budget, CRM, gestione progetti per freelance e piccole attività) su <b>Gumroad ed Etsy</b>, gestito da 5 agenti: direzione, prodotto, negozio e SEO, marketing, assistenza e finanza. Costi fissi stimati <b>50–125 € al mese</b>. Alla persona restano partita IVA, account con dati reali e approvazioni.</p><p><b>Conti onesti</b>: in perdita o in pareggio nei primi 2 mesi, pareggio realistico non prima del mese 3–4, e solo nello scenario medio. Lo scrivono loro: «non promettere utili dal mese 1».</p>' },
+          { color: '#e3f6e8', html: '<p><b>✅ Verifica indipendente</b></p><ul><li>Gumroad 10% + 0,50 $ a vendita, 30% via Discover: <b>vero</b>. In una sezione dei conti gli agenti usano «circa 21%»: impreciso, ma con i costi di pagamento l\'ordine di grandezza regge.</li><li>Etsy vieta le guide «funzionali» generate con AI e permette l\'AI-assistito dichiarato: <b>vero nella sostanza</b>, ma la regola è di <b>fine ottobre 2026</b>, non del 2025 come scrivono.</li><li>Legge 132/2025: diritto d\'autore solo per opere frutto di lavoro umano: <b>vero</b>. Per questo i modelli generati solo dall\'AI si possono copiare.</li></ul>' },
+          { color: '#fde2e4', html: '<p><b>⚠️ Cosa non è</b></p><ul><li>Nessuna vendita reale: tutti i numeri sono stime.</li><li>Gli agenti non hanno aperto account né toccato pagamenti.</li><li>Non è consulenza fiscale: partita IVA, IVA sui prodotti digitali e codice ATECO vanno visti con un commercialista.</li><li>Una card (l\'organigramma) è rimasta «da approvare»: gli agenti hanno chiesto alla persona di approvarla per chiudere la presentazione.</li></ul>' },
+        ]);
+        // le sezioni degli agenti, copiate com'erano: presentazione, organigramma, conti, unit economics, rischi
+        d.sezioni.forEach((list, k) => {
+          const ids = {}; for (const e of list) ids[e.id] = uid();
+          for (const e of list) {
+            const { id, type, x = 0, y = 0, ...rest } = e;
+            const el = makeEl(type, type === 'column' ? 480 + k * 460 : 0, type === 'column' ? 40 : 0, { ...rest, board: autoBid, w: type === 'column' ? 420 : rest.w, agentSession: e.agentAuthor ? e.agentAuthor.slice(0, 4) : undefined, col: rest.col ? ids[rest.col] : null });
+            delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el;
+            if (type === 'column') el.items = (e.items || []).map(i => ids[i]).filter(Boolean);
+          }
+        });
+        const sub = makeEl('board', 0, 0, { board: autoBid, title: 'Dietro le quinte: piano, messaggi, card' });
+        sub.col = lead.id; lead.items.push(sub.id);
+        const sb = S.boards[sub.target]; sb.color = '#f4f4f4'; sb.colorSet = true; sb.icon = { type: 'emoji', ch: '🎬' }; sb.named = true;
+        cur = sb.id;
+        col(sb.id, 40, 440, '📋 La card PIANO', [{ html: d.piano }, { html: d.card }]);
+        col(sb.id, 520, 520, '📨 Messaggi', [{ html: d.messaggi }]);
+        cur = prev;
+      }
+    }
     commit();
-    if (foundBid && !opened) { openBoard(foundBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la startup fondata dagli agenti, nella board «' + FOUND_TITLE + '»'); }
+    if (autoBid && !opened) { openBoard(autoBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la startup gestita da agenti AI, nella board «' + AUTO_TITLE + '»'); }
+    else if (foundBid && !opened) { openBoard(foundBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la startup fondata dagli agenti, nella board «' + FOUND_TITLE + '»'); }
     else if (startBid && !opened) { openBoard(startBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la simulazione «' + START_TITLE + '»'); }
     else if (labBid && !opened) { openBoard(labBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il laboratorio di idee sulla lavagna, nella board «' + LAB_TITLE + '»'); }
     else if (expBid && !opened) { openBoard(expBid); requestAnimationFrame(() => { /* una colonna per volta, leggibile anche dal telefono, partendo da «Leggi prima» */ setZoom(Math.min(1, VP().clientWidth / 440)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: l\u2019esperimento con 4 agenti, nella board «' + EXP_TITLE + '»'); }
