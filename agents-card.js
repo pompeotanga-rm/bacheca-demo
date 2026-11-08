@@ -494,7 +494,8 @@
           toast(`Compito ${c.id} creato${c.assignee ? ` per ${c.assignee}` : ''} nella board «${c.project || 'senza progetto'}»`, bid && cur !== bid ? 'Apri' : null, () => { const b2 = bid || Object.values(S.boards).find(b => (b.agentProject || null) === (c.project || null) && b.agentProject !== undefined)?.id; if (b2 && S.boards[b2]) openBoard(b2); });
         } else {
           const c = await demo.createTask(t);
-          const nx = nearEl ? (nearEl.x + (nearEl.w || 260) + 40) : at?.x ?? 40, ny = nearEl ? nearEl.y : at?.y ?? 40;
+          // come sul server: il compito sotto l'elemento da cui nasce (i commenti vanno a destra)
+          const nx = nearEl ? nearEl.x : at?.x ?? 40, ny = nearEl ? nearEl.y + (nodes.get(nearEl.id)?.offsetHeight || 120) + 50 : at?.y ?? 40;
           const ac = makeEl('agentcard', nx, ny, { cardId: c.id });
           if (nearEl) makeEl('line', 0, 0, { x1: 0, y1: 0, x2: 0, y2: 0, a: nearEl.id, b: ac.id, bx: 0, by: 0, arrowEnd: true, dash: true, width: 1.5, color: '#6d83d8', label: 'compito' });
           render(); commit();
