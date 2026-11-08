@@ -260,6 +260,31 @@ const Sync = (() => {
     hist.stack = [JSON.stringify(S)]; hist.idx = 0; updateUndoBtns();
   }
 
+  /* ------------------------------ misure per gli agenti ------------------------------ */
+  // Gli agenti non vedono lo schermo: il browser di chi guarda la board manda al server le dimensioni reali degli
+  // elementi, così i controlli che il server fa per loro (board_check) usano misure vere e non stime.
+  // Si manda solo ciò che è cambiato (dimensione o contenuto), al massimo ogni 3 secondi, solo con la pagina visibile.
+  const sentSizes = new Map();
+  let measuring = false;
+  async function measure() {
+    if (!active || measuring || document.visibilityState !== 'visible' || typeof nodes === 'undefined') return;
+    const out = {};
+    for (const [id, n] of nodes) {
+      const el = S.elements[id];
+      if (!el || el.deleted || el.board !== cur || el.type === 'line' || !n.isConnected) continue;
+      const w = Math.round(n.offsetWidth), h = Math.round(n.offsetHeight);
+      if (!w || !h) continue;
+      const key = `${w}x${h}|${base.get('e:' + id) || ''}`; // cambia anche quando cambia il contenuto
+      if (sentSizes.get(id) === key || base.get('e:' + id) !== hash(json(el))) continue; // solo elementi uguali alla versione del server
+      out[id] = [w, h]; sentSizes.set(id, key);
+      if (Object.keys(out).length >= 500) break;
+    }
+    if (!Object.keys(out).length) return;
+    measuring = true;
+    try { await api('POST', '/api/lavagna/sizes', { rev, sizes: out }); } catch { for (const id of Object.keys(out)) sentSizes.delete(id); } finally { measuring = false; }
+  }
+  setInterval(measure, 3000);
+
   /* ------------------------------ file ------------------------------ */
   function referencedFiles() {
     const ids = new Set();
