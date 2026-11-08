@@ -131,7 +131,7 @@
   // riordinato dall'alto in basso e con testi brevi per leggerlo anche dal telefono
   const DEMO_BOARD_KEY3 = 'bacheca-demo-board-v4';
   const SCHEMA_TITLE = 'Schema disegnato da un agente';
-  const DEMO_BOARD_KEY4 = 'bacheca-demo-board-v6'; // esperimento: 4 agenti insieme (dati in demo-esperimento.json)
+  const DEMO_BOARD_KEY4 = 'bacheca-demo-board-v7'; // esperimento: 4 agenti insieme (dati in demo-esperimento.json e demo-esperimento-2.json)
   const EXP_TITLE = 'Esperimento: 4 agenti insieme';
   const AGENT_COLORS = { architetto: '#ffffff', sicurezza: '#fde2e4', operativo: '#dff3e3', futuro: '#dcecfb' };
   const sig = { agentAuthor: 'claude-code', agentSession: 'f997' };
@@ -208,20 +208,26 @@
       }
       cur = prev;
     }
-    // quarta parte: l'esperimento con 4 agenti Claude Code sulla stessa board. La board com'era uscita (larga 4000 px,
-    // frecce lunghe, un vuoto al centro) non si legge, tanto meno dal telefono: qui è riordinata, una colonna per
-    // agente con i loro testi invariati; l'originale resta dentro come sotto-board, per confronto.
+    // quarta parte: l'esperimento con 4 agenti Claude Code sulla stessa board, fatto due volte.
+    // Giro 1: il server MCP chiedeva coordinate in pixel → board enorme, sovrapposizioni, 28 spostamenti.
+    // Giro 2: stesso compito con le sezioni automatiche e i messaggi tra agenti → board ordinata da sola.
+    // La board mostra il giro 2 così com'è uscito; il giro 1 resta dentro, intatto, per confronto.
     let expBid = null;
     if (!ls.get(DEMO_BOARD_KEY4)) {
-      let data = null;
-      try { const r = await fetch('demo-esperimento.json', { cache: 'no-cache' }); if (r.ok) data = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
-      if (Array.isArray(data) && data.length) {
+      let g1 = null, g2 = null;
+      try {
+        const [r1, r2] = await Promise.all([fetch('demo-esperimento.json', { cache: 'no-cache' }), fetch('demo-esperimento-2.json', { cache: 'no-cache' })]);
+        if (r1.ok && r2.ok) { g1 = await r1.json(); g2 = await r2.json(); }
+      } catch { /* demo offline: si riprova la prossima volta */ }
+      if (Array.isArray(g1) && g1.length && g2 && Array.isArray(g2.elements)) {
         ls.set(DEMO_BOARD_KEY4, '1');
         const prev = cur; cur = 'home';
         const oldEl = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === EXP_TITLE);
-        if (oldEl) { // versione precedente, illeggibile: la svuota e la riempie di nuovo
+        if (oldEl) { // versione precedente: la svuota (anche le sue sotto-board) e la riempie di nuovo
           expBid = oldEl.target;
-          for (const e of Object.values(S.elements)) if (e.board === expBid) delete S.elements[e.id];
+          const subs = new Set(Object.values(S.boards).filter(b => b.parent === expBid).map(b => b.id));
+          for (const e of Object.values(S.elements)) if (e.board === expBid || subs.has(e.board)) delete S.elements[e.id];
+          for (const b of subs) delete S.boards[b];
         } else {
           const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
           const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === SCHEMA_TITLE);
@@ -229,55 +235,37 @@
           const b = S.boards[bel.target]; b.color = '#ffe2c6'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🧪' }; b.named = true;
           expBid = b.id;
         }
-        cur = expBid;
         const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const plain = h => { const t = document.createElement('template'); t.innerHTML = String(h || ''); return t.content.textContent.replace(/\s+/g, ' ').trim(); };
-        const byId = Object.fromEntries(data.map(e => [e.id, e]));
-        const boldOf = h => { const m = String(h || '').match(/<b>(.*?)<\/b>/); return m ? plain(m[1]) : ''; };
-        const nameOf = e => !e ? '?' : e.type === 'column' ? e.title : e.type === 'heading' ? plain(e.html) : e.type === 'todo' ? 'flusso di una richiesta' : (boldOf(e.html) || plain(e.html).slice(0, 45) + '…');
-        const isCoord = e => e.type === 'note' && /dove lavoro|mi sposto|ha spostato/i.test(plain(e.html).slice(0, 160));
-        const sig = n => ({ agentAuthor: n, agentSession: n.slice(0, 4) });
-        const W = 380; let cx = 40;
-        const addCol = (title, items) => {
-          const c = makeEl('column', cx, 40, { board: expBid, w: W, title }); cx += W + 40;
-          for (const [type, extra] of items) { const el = makeEl(type, 0, 0, { board: expBid, w: W - 20, ...extra }); el.col = c.id; c.items.push(el.id); }
-          return c;
+        // copia fedele di una serie di elementi in una board, con id nuovi e spostamento orizzontale
+        const copyAll = (data, bid, dx, dy) => {
+          const ids = {}; for (const e of data) ids[e.id] = uid();
+          for (const e of data) {
+            const { id, type, x = 0, y = 0, ...rest } = e;
+            const extra = { ...rest, board: bid, agentSession: e.agentAuthor ? e.agentAuthor.slice(0, 4) : undefined };
+            if (type === 'line') Object.assign(extra, { x1: 0, y1: 0, x2: 0, y2: 0, a: ids[e.a], b: ids[e.b], bx: 0, by: 0 });
+            if (rest.col) extra.col = ids[rest.col] || null;
+            const el = makeEl(type, type === 'line' ? 0 : x + dx, type === 'line' ? 0 : y + dy, extra);
+            delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el;
+            if (type === 'column') el.items = (e.items || []).map(i => ids[i]).filter(Boolean);
+          }
         };
-        const notesOf = n => data.filter(e => e.agentAuthor === n && (e.type === 'note' || e.type === 'todo') && !isCoord(e) && !e.col).sort((a, b) => a.y - b.y || a.x - b.x);
-        const lines = data.filter(e => e.type === 'line' && byId[e.a] && byId[e.b]);
-        const coord = data.filter(isCoord);
-        // 1) leggi prima
-        const lead = addCol('📖 Leggi prima', [
-          ['note', { color: '#fff6d6', html: '<p><b>🧪 Cosa è successo</b></p><p>Quattro sessioni vere di Claude Code, nello stesso momento, sulla stessa board. Ognuna con il suo token e il permesso «solo i propri elementi». Nessuno ha assegnato zone: dovevano leggere la lavagna e accordarsi da soli.</p><p>Circa 3 minuti ciascuna, 47 elementi in tutto.</p>' }],
-          ['note', { color: '#fff6d6', html: '<p><b>📖 Come si legge</b></p><p>Una colonna per agente: scorri verso destra.</p><ul><li>🏗️ <b>architetto</b>: come funziona</li><li>🔐 <b>sicurezza</b>: rischi e NIS2</li><li>🛠️ <b>operativo</b>: chi la gestisce</li><li>🔮 <b>futuro</b>: dove può portare</li></ul><p>I testi sono quelli scritti dagli agenti: ho cambiato solo la disposizione.</p>' }],
-          ['note', { color: '#fff6d6', html: '<p><b>💡 Cosa è emerso</b></p><ul><li>Si sono coordinati da soli con note «dove lavoro» e spostandosi quando si sovrapponevano.</li><li>Nessuno ha toccato il lavoro degli altri: il permesso ha funzionato.</li><li>Hanno trovato un difetto vero: vedevano coordinate vecchie per le note dentro le colonne. Ora è corretto.</li><li>Il limite: messa insieme da 4 agenti la board era enorme e confusa. Serve qualcuno che riordini alla fine, come qui.</li></ul>' }],
-          ['note', { html: '<p><b>🔗 Collegamenti tracciati dagli agenti</b></p><ul>' + lines.map(l => `<li><b>${esc(l.agentAuthor)}</b>: ${esc(nameOf(byId[l.a]))} → ${esc(nameOf(byId[l.b]))}${l.label ? ` <i>(${esc(l.label)})</i>` : ''}</li>`).join('') + '</ul>' }],
-          ['note', { html: '<p><b>💬 Messaggi tra agenti</b></p>' + coord.map(e => `<p><b>${esc(e.agentAuthor)}</b>: ${esc(plain(e.html))}</p>`).join('') }],
-        ]);
-        // 2) una colonna per agente
-        const arch = data.filter(e => e.agentAuthor === 'architetto' && e.type === 'column').sort((a, b) => a.x - b.x);
-        addCol('🏗️ Architetto · come funziona', [
-          ...arch.flatMap(c => (c.items || []).map(id => byId[id]).filter(Boolean).map(n => ['note', { ...sig('architetto'), html: `<p><b>${esc(c.title)}</b></p>` + n.html }])),
-          ...notesOf('architetto').map(e => [e.type, { ...sig('architetto'), ...(e.type === 'todo' ? { title: 'Flusso di una richiesta di un agente', items: e.items } : { html: e.html }) }]),
-        ]);
-        for (const [n, t] of [['sicurezza', '🔐 Sicurezza · rischi e NIS2'], ['operativo', '🛠️ Operativo · chi la gestisce'], ['futuro', '🔮 Futuro · dove può portare']])
-          addCol(t, notesOf(n).map(e => [e.type, { ...sig(n), color: AGENT_COLORS[n], ...(e.type === 'todo' ? { title: e.title, items: e.items } : { html: e.html }) }]));
-        // 3) la board originale, intatta, come sotto-board
-        const sub = makeEl('board', 0, 0, { board: expBid, title: 'Com’era la board originale' });
+        cur = expBid;
+        // giro 2, così com'è: le colonne degli agenti, spostate a destra per fare posto a «Leggi prima»
+        copyAll(g2.elements, expBid, 440, 0);
+        const lead = makeEl('column', 40, 40, { board: expBid, w: 380, title: '📖 Leggi prima' });
+        const put = (type, extra) => { const el = makeEl(type, 0, 0, { board: expBid, w: 360, ...extra }); el.col = lead.id; lead.items.push(el.id); return el; };
+        const Y = '#fff6d6';
+        put('note', { color: Y, html: '<p><b>🧪 Cosa è successo</b></p><p>Quattro sessioni vere di Claude Code (architetto, sicurezza, operativo, futuro), nello stesso momento, sulla stessa board, con lo stesso compito: spiegare come funziona Bacheca e cosa implica.</p><p>L’abbiamo fatto <b>due volte</b>. Dopo il primo giro ho migliorato il server MCP, poi ho rilanciato gli stessi agenti.</p><p>Quello che vedi a destra è il <b>secondo giro, così com’è uscito</b>: nessun riordino a mano.</p>' });
+        put('note', { color: Y, html: '<p><b>📊 Primo giro → secondo giro</b></p><ul><li>Tempo per agente: <b>~3 min → ~1,5 min</b></li><li>Costo totale: <b>2,80 $ → 2,18 $</b></li><li>Spostamenti per evitarsi: <b>28 + 4 cancellazioni → 2, nessuna</b></li><li>Testo letto dalla board: <b>106 KB → 28 KB</b></li><li>Sovrapposizioni: <b>diverse → nessuna</b></li><li>Coordinamento: <b>note sulla lavagna → 4 messaggi fuori</b></li><li>Board: <b>4000 px e un vuoto → 4 colonne pulite</b></li></ul>' });
+        put('note', { color: Y, html: '<p><b>🔧 Cosa è cambiato nel server MCP</b></p><ul><li><b>start_section</b>: ogni agente apre una sua colonna, il server la mette nello spazio libero e ci impila dentro gli elementi. Niente coordinate da indovinare.</li><li><b>send_message / read_messages</b>: si coordinano con messaggi fuori dalla lavagna, che restano nel registro.</li><li><b>board_elements</b> più leggero: raggruppato per sezioni e «solo le novità» dalla lettura precedente.</li></ul>' });
+        put('note', { html: '<p><b>💬 I messaggi che si sono scambiati</b></p>' + (g2.messages || []).map(m => `<p><b>${esc(m.from)}</b>${m.to ? ` → ${esc(m.to)}` : ''}: ${esc(m.text)}</p>`).join('') });
+        // giro 1, intatto, come sotto-board
+        const sub = makeEl('board', 0, 0, { board: expBid, title: 'Primo giro: com’era' });
         sub.col = lead.id; lead.items.push(sub.id);
         const sb = S.boards[sub.target]; sb.color = '#ececec'; sb.colorSet = true; sb.icon = { type: 'emoji', ch: '🗂️' }; sb.named = true;
         cur = sb.id;
-        const ids = {}; for (const e of data) ids[e.id] = uid();
-        for (const e of data) {
-          const { id, type, x = 0, y = 0, ...rest } = e;
-          const extra = { ...rest, board: sb.id, agentSession: e.agentAuthor ? e.agentAuthor.slice(0, 4) : undefined };
-          if (type === 'line') Object.assign(extra, { x1: 0, y1: 0, x2: 0, y2: 0, a: ids[e.a], b: ids[e.b], bx: 0, by: 0 });
-          if (rest.col) extra.col = ids[rest.col] || null;
-          const el = makeEl(type, x, type === 'line' ? 0 : y + 200, extra);
-          delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el;
-          if (type === 'column') el.items = (e.items || []).map(i => ids[i]).filter(Boolean);
-        }
-        makeEl('note', 40, 20, { board: sb.id, w: 900, color: '#ececec', html: '<p><b>La board esattamente com’era alla fine dell’esperimento.</b> Il vuoto al centro: gli agenti ricevevano coordinate vecchie per le note dentro le colonne e credevano occupata quella zona. Difetto scoperto qui e già corretto.</p>' });
+        copyAll(g1, sb.id, 0, 200);
+        makeEl('note', 40, 20, { board: sb.id, w: 900, color: '#ececec', html: '<p><b>Il primo giro, esattamente com’era.</b> Gli agenti dovevano scegliere da soli coordinate in pixel senza vedere lo schermo: si sono sovrapposti, spostati 28 volte e la board è cresciuta fino a 4000 px. Il vuoto al centro: ricevevano coordinate vecchie per le note dentro le colonne (difetto scoperto qui e corretto).</p>' });
         cur = prev;
       }
     }
