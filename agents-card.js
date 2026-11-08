@@ -141,6 +141,46 @@
   const FOUND_TITLE = 'Startup fondata dagli agenti';
   const DEMO_BOARD_KEY8 = 'bacheca-demo-board-v11'; // startup gestita da agenti, con regola di coordinamento (dati in demo-startup3.json)
   const AUTO_TITLE = 'Startup gestita da agenti AI';
+  const DEMO_BOARD_KEY9 = 'bacheca-demo-board-v12'; // canale autogestito da agenti (dati in demo-canale.json)
+  const CANALE_TITLE = 'Canale autogestito: AGENTS, INC.';
+  // board di un esperimento: «Leggi prima» a sinistra, le sezioni degli agenti copiate com'erano, una sotto-board
+  // «dietro le quinte»; se la board esiste già viene svuotata e riempita (niente doppioni)
+  function seedRunBoard({ title, nearTitle, color, emoji, lead, sezioni, subTitle, subCols }) {
+    const prev = cur; cur = 'home';
+    let bid;
+    const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === title);
+    if (old) {
+      bid = old.target;
+      const subs = new Set(Object.values(S.boards).filter(x => x.parent === bid).map(x => x.id));
+      for (const e of Object.values(S.elements)) if (e.board === bid || subs.has(e.board)) delete S.elements[e.id];
+      for (const x of subs) delete S.boards[x];
+    } else {
+      const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+      const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === nearTitle);
+      const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title });
+      const b = S.boards[bel.target]; b.color = color; b.colorSet = true; b.icon = { type: 'emoji', ch: emoji }; b.named = true;
+      bid = b.id;
+    }
+    cur = bid;
+    const col = (board, x, w, t, notes) => { const c = makeEl('column', x, 40, { board, w, title: t }); for (const n of notes) { const el = makeEl('note', 0, 0, { board, w: w - 20, ...n }); el.col = c.id; c.items.push(el.id); } return c; };
+    const leadCol = col(bid, 40, 400, '📖 Leggi prima', lead);
+    sezioni.forEach((list, k) => {
+      const ids = {}; for (const e of list) ids[e.id] = uid();
+      for (const e of list) {
+        const { id, type, x = 0, y = 0, ...rest } = e;
+        const el = makeEl(type, type === 'column' ? 480 + k * 460 : 0, type === 'column' ? 40 : 0, { ...rest, board: bid, w: type === 'column' ? 420 : rest.w, agentSession: e.agentAuthor ? e.agentAuthor.slice(0, 4) : undefined, col: rest.col ? ids[rest.col] : null });
+        delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el;
+        if (type === 'column') el.items = (e.items || []).map(i => ids[i]).filter(Boolean);
+      }
+    });
+    const sub = makeEl('board', 0, 0, { board: bid, title: subTitle });
+    sub.col = leadCol.id; leadCol.items.push(sub.id);
+    const sb = S.boards[sub.target]; sb.color = '#f4f4f4'; sb.colorSet = true; sb.icon = { type: 'emoji', ch: '🎬' }; sb.named = true;
+    cur = sb.id;
+    subCols.forEach((c, k) => col(sb.id, 40 + k * 520, 480, c.title, c.notes));
+    cur = prev;
+    return bid;
+  }
   const AGENT_COLORS = { architetto: '#ffffff', sicurezza: '#fde2e4', operativo: '#dff3e3', futuro: '#dcecfb' };
   const sig = { agentAuthor: 'claude-code', agentSession: 'f997' };
   const DEMO_SCHEMA = [
@@ -156,7 +196,7 @@
     { id: 'l3', type: 'line', a: 'srv', b: 'brd', label: 'compiti', ...sig },
     { id: 'l4', type: 'line', a: 'srv', b: 'lav', label: 'disegni', ...sig },
   ];
-  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6) || !ls.get(DEMO_BOARD_KEY7) || !ls.get(DEMO_BOARD_KEY8))) seedDemoBoard(); });
+  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6) || !ls.get(DEMO_BOARD_KEY7) || !ls.get(DEMO_BOARD_KEY8) || !ls.get(DEMO_BOARD_KEY9))) seedDemoBoard(); });
   async function seedDemoBoard() {
     for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
     if (!S) return;
@@ -474,8 +514,28 @@
         cur = prev;
       }
     }
+    // nona parte: canale media autogestito da agenti AI
+    let canaleBid = null;
+    if (!ls.get(DEMO_BOARD_KEY9)) {
+      let d = null;
+      try { const r = await fetch('demo-canale.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (d && Array.isArray(d.sezioni)) {
+        ls.set(DEMO_BOARD_KEY9, '1');
+        const Y = '#fff6d6';
+        canaleBid = seedRunBoard({ title: CANALE_TITLE, nearTitle: AUTO_TITLE, color: '#ffd6e0', emoji: '🎥', sezioni: d.sezioni, subTitle: 'Dietro le quinte: piano, sceneggiatura, messaggi',
+          lead: [
+            { color: Y, html: '<p><b>🎥 Cosa è successo</b></p><p>5 agenti Claude Code, obiettivo: <b>un canale media autogestito da agenti AI</b> (YouTube o altra piattaforma), innovativo e non il solito canale «faceless», semplice e redditizio in poco tempo, senza persone assunte. Obbligatorio: verificare le regole delle piattaforme, progettare la catena di agenti, produrre un esempio vero.</p><p>In <b>4 giri, 16 minuti</b>: 8 card, 25 messaggi, 4 sezioni. Costo circa 12 $. Coordinamento con la card «PIANO»: un solo doppione, chiuso dall\'agente che l\'aveva creato.</p>' },
+            { color: Y, html: '<p><b>💡 L\'idea: «AGENTS, INC.»</b></p><p>Un docu-reality: la <b>cronaca vera di agenti AI che fondano e gestiscono un\'attività</b>, con le schermate della bacheca, le citazioni letterali delle loro discussioni e i numeri reali. La voce sintetica è sempre dichiarata: l\'AI dichiarata è il marchio, non un trucco. Il pubblico vota le decisioni ancora aperte e influenza davvero il progetto.</p><p>Formati: episodio lungo settimanale, 3 Shorts a settimana su YouTube, TikTok e Reels, più una newsletter.</p>' },
+            { color: Y, html: '<p><b>💰 I conti, onesti</b></p><ul><li>Costi: circa 25–50 € al mese di strumenti, meno di 1–3 $ a episodio.</li><li>Pubblicità: servono 1.000 iscritti e 4.000 ore di visione; i canali simili restano spesso sotto 1–2 mila iscritti dopo mesi. Primi ricavi dalla pubblicità: <b>6–12 mesi o più</b>.</li><li>Più rapido: <b>sponsor di strumenti AI e affiliazioni</b> (il canale è un caso di studio), stimati in 3–6 mesi.</li><li>Lo dicono loro: «redditizio in poco tempo» va ridimensionato.</li></ul>' },
+            { color: '#e3f6e8', html: '<p><b>✅ Verifica indipendente</b> (fonti secondarie concordanti)</p><ul><li>Soglie YouTube: 1.000 iscritti + 4.000 ore in 12 mesi, oppure 10 milioni di visualizzazioni Shorts in 90 giorni; <b>dal 1° febbraio 2027 8.000 ore o 20 milioni</b>: vero.</li><li>Niente monetizzazione per i contenuti «inautentici» (in serie, a template), anche fatti con l\'AI; ammessa l\'AI con contributo originale: vero, dal luglio 2025.</li><li>Nicchia tecnologia: circa 5,73 $ ogni mille visualizzazioni pagate dagli inserzionisti, 2,33 $ al creatore (studio AIR Media-Tech 2026): vero.</li></ul>' },
+            { color: '#fde2e4', html: '<p><b>⚠️ Cosa non è</b></p><ul><li>Nessun canale aperto, nessun video caricato: è un progetto pronto da valutare.</li><li>Alla persona restano: apertura dei profili con identità reale, pagamenti, contratti con sponsor e il clic finale di pubblicazione (su TikTok l\'automazione non autorizzata porta al ban).</li><li>I contenuti generati solo dall\'AI non sono protetti dal diritto d\'autore: vanno documentate le scelte editoriali.</li></ul>' },
+          ],
+          subCols: [{ title: '📋 Piano e card', notes: [{ html: d.piano }, { html: d.card }] }, { title: '🎬 Episodio 0', notes: [{ html: d.script }] }, { title: '📨 Messaggi', notes: [{ html: d.messaggi }] }] });
+      }
+    }
     commit();
-    if (autoBid && !opened) { openBoard(autoBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la startup gestita da agenti AI, nella board «' + AUTO_TITLE + '»'); }
+    if (canaleBid && !opened) { openBoard(canaleBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il canale autogestito, nella board «' + CANALE_TITLE + '»'); }
+    else if (autoBid && !opened) { openBoard(autoBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la startup gestita da agenti AI, nella board «' + AUTO_TITLE + '»'); }
     else if (foundBid && !opened) { openBoard(foundBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la startup fondata dagli agenti, nella board «' + FOUND_TITLE + '»'); }
     else if (startBid && !opened) { openBoard(startBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la simulazione «' + START_TITLE + '»'); }
     else if (labBid && !opened) { openBoard(labBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il laboratorio di idee sulla lavagna, nella board «' + LAB_TITLE + '»'); }
