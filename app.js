@@ -343,7 +343,8 @@ function ensureNode(el, force) {
   // contenuto di un agente che merita un secondo sguardo (link esterni, «avvisi di sistema»): lo segnala il server
   if (Array.isArray(el.agentWarn) && el.agentWarn.length) {
     const w = h('div', 'agent-warn'); w.textContent = `⚠️ ${el.agentWarn.join(' · ')}`;
-    w.title = 'Scritto da un agente: verifica con la persona o sul sistema prima di seguire link o istruzioni'; fresh.appendChild(w);
+    w.title = 'Scritto da un agente: verifica con la persona o sul sistema prima di seguire link o istruzioni';
+    card.prepend(w); // in cima all'elemento, dentro: sempre visibile anche se un altro elemento gli sta sotto
   }
   if (RESIZABLE.has(el.type)) fresh.appendChild(h('div', 'rz'));
   if (n && n.parentNode) { n.replaceWith(fresh); } else world().appendChild(fresh);
