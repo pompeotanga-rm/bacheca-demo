@@ -137,6 +137,8 @@
   const LAB_TITLE = 'Laboratorio: la lavagna migliore';
   const DEMO_BOARD_KEY6 = 'bacheca-demo-board-v9'; // simulazione "startup in 10 minuti": 5 agenti + orchestratore (dati in demo-startup.json)
   const START_TITLE = 'Startup in 10 minuti (simulazione)';
+  const DEMO_BOARD_KEY7 = 'bacheca-demo-board-v10'; // startup fondata da 5 agenti da soli, con ricerca web (dati in demo-startup2.json)
+  const FOUND_TITLE = 'Startup fondata dagli agenti';
   const AGENT_COLORS = { architetto: '#ffffff', sicurezza: '#fde2e4', operativo: '#dff3e3', futuro: '#dcecfb' };
   const sig = { agentAuthor: 'claude-code', agentSession: 'f997' };
   const DEMO_SCHEMA = [
@@ -152,7 +154,7 @@
     { id: 'l3', type: 'line', a: 'srv', b: 'brd', label: 'compiti', ...sig },
     { id: 'l4', type: 'line', a: 'srv', b: 'lav', label: 'disegni', ...sig },
   ];
-  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6))) seedDemoBoard(); });
+  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6) || !ls.get(DEMO_BOARD_KEY7))) seedDemoBoard(); });
   async function seedDemoBoard() {
     for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
     if (!S) return;
@@ -373,8 +375,56 @@
         cur = prev;
       }
     }
+    // settima parte: 5 agenti con il solo obiettivo, ricerca sul web e nessuna organizzazione imposta
+    let foundBid = null;
+    if (!ls.get(DEMO_BOARD_KEY7)) {
+      let d = null;
+      try { const r = await fetch('demo-startup2.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (d && Array.isArray(d.pitch)) {
+        ls.set(DEMO_BOARD_KEY7, '1');
+        const prev = cur; cur = 'home';
+        const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === FOUND_TITLE);
+        if (old) {
+          foundBid = old.target;
+          const subs = new Set(Object.values(S.boards).filter(x => x.parent === foundBid).map(x => x.id));
+          for (const e of Object.values(S.elements)) if (e.board === foundBid || subs.has(e.board)) delete S.elements[e.id];
+          for (const x of subs) delete S.boards[x];
+        } else {
+          const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+          const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === START_TITLE);
+          const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: FOUND_TITLE });
+          const b = S.boards[bel.target]; b.color = '#d5f0dc'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🧹' }; b.named = true;
+          foundBid = b.id;
+        }
+        cur = foundBid;
+        const col = (bid, x, w, title, notes) => { const c = makeEl('column', x, 40, { board: bid, w, title }); for (const n of notes) { const el = makeEl('note', 0, 0, { board: bid, w: w - 20, ...n }); el.col = c.id; c.items.push(el.id); } return c; };
+        const Y = '#fff6d6';
+        const lead = col(foundBid, 40, 400, '📖 Leggi prima', [
+          { color: Y, html: '<p><b>🧹 Cosa è successo</b></p><p>5 agenti Claude Code (agente-1 … agente-5) con <b>un solo obiettivo</b>: «fondare da zero una startup semplice e redditizia in poco tempo». Nessun ruolo, nessuna filiera, nessuna idea data: potevano cercare sul web e organizzarsi come volevano.</p><p>In <b>2 giri, circa 14 minuti</b>, hanno scelto l\'idea, creato e chiuso 34 card, scambiato 23 messaggi e assemblato il pitch qui a destra. Costo circa 10 $. Il giro 3 (rifinitura) si è fermato per il limite di utilizzo dell\'account.</p>' },
+          { color: Y, html: '<p><b>🤝 Come si sono organizzati</b></p><ul><li>Partiti insieme sulla bacheca vuota, <b>hanno proposto 5 idee diverse in parallelo</b> e creato card doppie.</li><li>Se ne sono accorti da soli («siamo partiti tutti con 5 idee diverse»), hanno confrontato le idee sul criterio dato e aperto una card «DECISIONE».</li><li>Hanno scelto le <b>pulizie per case vacanza / Airbnb a Napoli con un livello di AI</b>: domanda non discrezionale, ciclo di vendita breve. Le idee di servizi AI per PMI sono state scartate perché quel mercato è più saturo e lento da vendere.</li><li>Poi si sono divisi il lavoro: numeri, aspetti legali e fiscali, go-to-market, rischi, pitch; e hanno riordinato la lavagna quando board_check segnalava sovrapposizioni.</li></ul>' },
+          { color: '#e3f6e8', html: '<p><b>✅ Verifica indipendente</b> (fatta da un altro agente, a parte)</p><ul><li>571.982 annunci Airbnb in Italia e 11.497 a Napoli (report Federalberghi, ago 2026): <b>vero</b>. Da sapere: Aigab contesta il dato e parla di circa 510.000 immobili.</li><li>ATECO 81.21.00 con coefficiente 67% nel forfettario: <b>vero</b> (due fonti concordi; meglio un controllo sulla tabella ufficiale).</li></ul>' },
+          { color: '#fde2e4', html: '<p><b>⚠️ Cosa non è</b></p><ul><li>Nessun contatto reale: clienti, prezzi a Napoli e assicurazione sono <b>stime</b>, dichiarate come tali nel pitch.</li><li>Non è una consulenza fiscale o legale: i passi per aprire l\'attività vanno verificati con un commercialista.</li><li>Il guadagno stimato è modesto e realistico (circa 400–1.100 € al mese netti) e dipende dal lavoro fisico: lo dicono loro stessi tra i rischi.</li></ul>' },
+        ]);
+        // il pitch, copiato com'è dalla lavagna degli agenti
+        const ids = {}; for (const e of d.pitch) ids[e.id] = uid();
+        for (const e of d.pitch) {
+          const { id, type, x = 0, y = 0, ...rest } = e;
+          const el = makeEl(type, type === 'column' ? 480 : 0, type === 'column' ? 40 : 0, { ...rest, board: foundBid, agentSession: e.agentAuthor ? e.agentAuthor.slice(0, 4) : undefined, col: rest.col ? ids[rest.col] : null });
+          delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el;
+          if (type === 'column') el.items = (e.items || []).map(i => ids[i]).filter(Boolean);
+        }
+        const sub = makeEl('board', 0, 0, { board: foundBid, title: 'Dietro le quinte: idee, decisione, messaggi' });
+        sub.col = lead.id; lead.items.push(sub.id);
+        const sb = S.boards[sub.target]; sb.color = '#f4f4f4'; sb.colorSet = true; sb.icon = { type: 'emoji', ch: '🎬' }; sb.named = true;
+        cur = sb.id;
+        col(sb.id, 40, 420, '💡 Prima della scelta', [{ html: d.idee }, { html: d.decisione }]);
+        col(sb.id, 500, 520, '📨 Messaggi e card', [{ html: d.messaggi }, { html: d.card }]);
+        cur = prev;
+      }
+    }
     commit();
-    if (startBid && !opened) { openBoard(startBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la simulazione «' + START_TITLE + '»'); }
+    if (foundBid && !opened) { openBoard(foundBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la startup fondata dagli agenti, nella board «' + FOUND_TITLE + '»'); }
+    else if (startBid && !opened) { openBoard(startBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la simulazione «' + START_TITLE + '»'); }
     else if (labBid && !opened) { openBoard(labBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il laboratorio di idee sulla lavagna, nella board «' + LAB_TITLE + '»'); }
     else if (expBid && !opened) { openBoard(expBid); requestAnimationFrame(() => { /* una colonna per volta, leggibile anche dal telefono, partendo da «Leggi prima» */ setZoom(Math.min(1, VP().clientWidth / 440)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: l\u2019esperimento con 4 agenti, nella board «' + EXP_TITLE + '»'); }
     else if (schemaBid && !opened) { openBoard(schemaBid); requestAnimationFrame(() => typeof zoomToFit === 'function' && zoomToFit()); toast('Novità: lo schema disegnato da un agente, nella board «Schema disegnato da un agente»'); }
