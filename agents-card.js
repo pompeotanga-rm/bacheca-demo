@@ -135,6 +135,8 @@
   const EXP_TITLE = 'Esperimento: 4 agenti insieme';
   const DEMO_BOARD_KEY5 = 'bacheca-demo-board-v8'; // laboratorio di idee sulla lavagna + prova reale (dati in demo-laboratorio.json)
   const LAB_TITLE = 'Laboratorio: la lavagna migliore';
+  const DEMO_BOARD_KEY6 = 'bacheca-demo-board-v9'; // simulazione "startup in 10 minuti": 5 agenti + orchestratore (dati in demo-startup.json)
+  const START_TITLE = 'Startup in 10 minuti (simulazione)';
   const AGENT_COLORS = { architetto: '#ffffff', sicurezza: '#fde2e4', operativo: '#dff3e3', futuro: '#dcecfb' };
   const sig = { agentAuthor: 'claude-code', agentSession: 'f997' };
   const DEMO_SCHEMA = [
@@ -150,7 +152,7 @@
     { id: 'l3', type: 'line', a: 'srv', b: 'brd', label: 'compiti', ...sig },
     { id: 'l4', type: 'line', a: 'srv', b: 'lav', label: 'disegni', ...sig },
   ];
-  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5))) seedDemoBoard(); });
+  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6))) seedDemoBoard(); });
   async function seedDemoBoard() {
     for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
     if (!S) return;
@@ -326,8 +328,54 @@
         cur = prev;
       }
     }
+    // sesta parte: la simulazione "startup in 10 minuti" (5 agenti Claude Code reali coordinati da un orchestratore)
+    let startBid = null;
+    if (!ls.get(DEMO_BOARD_KEY6)) {
+      let d = null;
+      try { const r = await fetch('demo-startup.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (d && Array.isArray(d.cols)) {
+        ls.set(DEMO_BOARD_KEY6, '1');
+        const prev = cur; cur = 'home';
+        const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === START_TITLE);
+        if (old) {
+          startBid = old.target;
+          const subs = new Set(Object.values(S.boards).filter(x => x.parent === startBid).map(x => x.id));
+          for (const e of Object.values(S.elements)) if (e.board === startBid || subs.has(e.board)) delete S.elements[e.id];
+          for (const x of subs) delete S.boards[x];
+        } else {
+          const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+          const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === LAB_TITLE);
+          const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: START_TITLE });
+          const b = S.boards[bel.target]; b.color = '#ffd9c2'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🚀' }; b.named = true;
+          startBid = b.id;
+        }
+        cur = startBid;
+        const col = (x, y, w, title, notes) => { const c = makeEl('column', x, y, { board: startBid, w, title }); for (const n of notes) { const el = makeEl('note', 0, 0, { board: startBid, w: w - 20, ...n, agentSession: n.agentAuthor ? n.agentAuthor.slice(0, 4) : undefined }); el.col = c.id; c.items.push(el.id); } return c; };
+        const Y = '#fff6d6', R = d.report.agenti;
+        const riga = (a, nome, lim) => `<li><b>${nome}</b>: ${R[a].tempo_dal_suo_input_s} s dal suo input (limite originale ${lim}; scalato ${R[a].budget_s} s), ${R[a].istanze} istanz${R[a].istanze === 1 ? 'a' : 'e'}</li>`;
+        const lead = col(40, 40, 400, '📖 Leggi prima', [
+          { color: Y, html: `<p><b>🚀 Cosa è successo</b></p><p>Un orchestratore (uno script) ha coordinato <b>5 agenti Claude Code reali</b> sulla lavagna condivisa, come una macchina a stati: card con dipendenze (contratto → audit → fattura → incasso → consegna), messaggi JSON <i>[Agent_ID, Timestamp, Status, Payload_Data, Blocking_Flag]</i>, segnali di sblocco dopo 2 cicli senza messaggi e kill-switch per errori, ritardi o colli di bottiglia.</p><p><b>Esito: ciclo completato in ${d.report.durata_s} secondi</b>, nessun kill, costo circa ${d.report.costo_usd_istanze_chiuse.toFixed(2).replace('.', ',')} $.</p>` },
+          { color: '#fde2e4', html: '<p><b>⚠️ Cosa è simulato</b></p><ul><li>Cliente fittizio («Cliente Demo S.r.l.»), nessun denaro reale: il pagamento è un evento mandato dall\'orchestratore dopo la fattura.</li><li>Nessuna risorsa o credenziale vera: chiavi e IBAN sono segnaposto.</li><li>Il «fatturato verificabile» è tracciato nel registro della bacheca, non incassato.</li></ul>' },
+          { color: Y, html: '<p><b>⏱️ Tempi per ufficio</b></p><ul>' + riga('sales', 'Sales', '3 min') + riga('sysadmin', 'Sysadmin', '15 s') + riga('legal', 'Legal', '10 s') + riga('finance', 'Finance', '—') + riga('logistics', 'Logistics', '—') + '</ul>' },
+          { color: Y, html: '<p><b>💡 Cosa abbiamo imparato</b></p><ul><li><b>Il kill-switch non è mai scattato</b> con i limiti scalati. Con quelli originali (15 s, 10 s) sarebbe scattato su Sysadmin e Legal, e anche su ogni sostituto: un agente AI vero impiega 25–40 s per leggere, scrivere e chiudere.</li><li><b>Gli orari nei messaggi JSON sono inventati</b> (un messaggio dice 14:21, il ciclo è finito alle 14:14): l\'orologio affidabile è quello del server.</li><li><b>Finance ha segnalato da sola un\'incongruenza</b>: contratto con anticipo 50%, pagamento simulato per intero.</li><li>Logistics ha avuto 1 conflitto di versione, sotto la soglia del kill-switch; 2 segnali di sblocco a chi taceva da 30 s.</li></ul>' },
+          { html: d.cronologia },
+        ]);
+        const sub = makeEl('board', 0, 0, { board: startBid, title: 'Messaggi JSON del protocollo' });
+        sub.col = lead.id; lead.items.push(sub.id);
+        const sb = S.boards[sub.target]; sb.color = '#f4f4f4'; sb.colorSet = true; sb.icon = { type: 'emoji', ch: '📨' }; sb.named = true;
+        makeEl('note', 40, 40, { board: sb.id, w: 700, html: d.messaggi });
+        makeEl('table', 480, 40, { board: startBid, rows: d.plancia.rows, colW: d.plancia.colW, headerRow: true, styles: {}, rowH: {} });
+        // gli uffici, nell'ordine della filiera; frecce tra colonne vicine
+        const order = ['sales', 'legal', 'finance', 'logistics', 'sysadmin'], ids = {};
+        order.forEach((a, i) => { const c = d.cols.find(x => x.agent === a); ids[a] = col(480 + i * 430, 330, 390, c.title, c.notes).id; });
+        const arrow = (a, b, label) => makeEl('line', 0, 0, { board: startBid, x1: 0, y1: 0, x2: 0, y2: 0, a: ids[a], b: ids[b], bx: 0, by: 0, arrowEnd: true, dash: false, width: 2, label });
+        arrow('sales', 'legal', 'contratto'); arrow('legal', 'finance', 'semaforo verde'); arrow('finance', 'logistics', 'incasso'); arrow('sysadmin', 'logistics', 'ambiente');
+        cur = prev;
+      }
+    }
     commit();
-    if (labBid && !opened) { openBoard(labBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il laboratorio di idee sulla lavagna, nella board «' + LAB_TITLE + '»'); }
+    if (startBid && !opened) { openBoard(startBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la simulazione «' + START_TITLE + '»'); }
+    else if (labBid && !opened) { openBoard(labBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il laboratorio di idee sulla lavagna, nella board «' + LAB_TITLE + '»'); }
     else if (expBid && !opened) { openBoard(expBid); requestAnimationFrame(() => { /* una colonna per volta, leggibile anche dal telefono, partendo da «Leggi prima» */ setZoom(Math.min(1, VP().clientWidth / 440)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: l\u2019esperimento con 4 agenti, nella board «' + EXP_TITLE + '»'); }
     else if (schemaBid && !opened) { openBoard(schemaBid); requestAnimationFrame(() => typeof zoomToFit === 'function' && zoomToFit()); toast('Novità: lo schema disegnato da un agente, nella board «Schema disegnato da un agente»'); }
     else if (bid) { openBoard(bid); toast(opened ? 'Ho aggiunto la board «Prova agenti» con un esempio da provare' : 'Novità nella board «Prova agenti»: le card degli agenti sono anche sulla lavagna'); }
