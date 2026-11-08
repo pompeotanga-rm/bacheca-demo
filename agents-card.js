@@ -327,6 +327,7 @@
     const top = mk('div', 'agc-top');
     top.append(mk('span', `agc-st agc-st-${c.status}`, STATUS_LABEL[c.status] || c.status));
     if (c.needsApproval && c.status !== 'done') top.append(mk('span', 'agx-tag', 'richiede approvazione'));
+    if (c.warn) top.append(warnTag(c.warn));
     if (src.kind === 'demo') top.append(mk('span', 'agx-demo', 'esempio'));
     box.append(top, row(c, { project: 'x' }, src, refresh)); // il progetto è già quello della board
   }
@@ -401,6 +402,7 @@
     if (c.assignee) meta.append(mk('span', 'agx-tag assignee', `per ${c.assignee}`));
     if (el.project === '*') meta.append(mk('span', 'agx-tag', c.project || 'senza progetto'));
     if (c.priority === 'high') meta.append(mk('span', 'agx-tag high', 'alta'));
+    if (c.warn) meta.append(warnTag(c.warn));
     meta.append(mk('span', '', when(c.updatedAt)));
     r.append(top, meta);
 
@@ -415,6 +417,8 @@
     return r;
   }
 
+  // avviso del server su testo scritto da un agente (link esterni, «a nome di» una persona o del sistema)
+  function warnTag(w) { const t = mk('span', 'agx-tag warn', `⚠️ ${w.join(' · ')}`); t.title = 'Scritto da un agente: verifica prima di seguire link o istruzioni'; return t; }
   function details(c, src, refresh) {
     const d = mk('div', 'agx-details');
     if (c.body) d.append(mk('div', 'agx-body', c.body));
@@ -422,7 +426,8 @@
     const cm = mk('div', 'agx-comments'); d.append(cm);
     load.then(full => {
       for (const m of (full.comments || []).slice(-3)) {
-        const x = mk('div', `agx-cm ${m.role}`); x.append(mk('div', 'agx-cm-h', `${m.role === 'agent' ? '🤖' : '👤'} ${m.author} · ${when(m.at)}`), mk('div', '', m.text)); cm.append(x);
+        const x = mk('div', `agx-cm ${m.role}`); x.append(mk('div', 'agx-cm-h', `${m.role === 'agent' ? '🤖' : '👤'} ${m.author} · ${when(m.at)}`), mk('div', '', m.text));
+        if (m.warn) x.append(warnTag(m.warn)); cm.append(x);
       }
     }).catch(() => { });
     const f = mk('form', 'agx-form');

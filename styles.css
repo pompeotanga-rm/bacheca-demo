@@ -821,3 +821,9 @@ html, body { touch-action: pan-x pan-y; }
 /* firma degli agenti sugli elementi della lavagna */
 .agent-tag { position: absolute; left: 0; top: -18px; font: 600 10px/16px var(--sans); color: #6b4fd8; background: #f1edfd; border-radius: 8px; padding: 0 7px; white-space: nowrap; pointer-events: none; z-index: 2; }
 body.dark .agent-tag { background: rgba(107,79,216,.25); color: #c9bbff; }
+
+/* avvisi su contenuti scritti dagli agenti (link esterni, «avvisi di sistema»): vedi contentWarnings in board.js */
+.agent-warn { position: absolute; left: 0; bottom: -20px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font: 600 10px/16px var(--sans); color: #8a4b00; background: #ffedc7; border: 1px solid #f3c66b; border-radius: 8px; padding: 0 7px; white-space: nowrap; pointer-events: none; z-index: 2; }
+body.dark .agent-warn { background: rgba(243,198,107,.18); color: #ffd58a; border-color: rgba(243,198,107,.4); }
+.agx-tag.warn { background: #ffedc7; color: #8a4b00; }
+body.dark .agx-tag.warn { background: rgba(243,198,107,.18); color: #ffd58a; }
