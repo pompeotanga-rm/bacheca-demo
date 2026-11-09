@@ -311,6 +311,7 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 .el-drawing .drawing svg { display: block; width: 100%; height: auto; }
 .el-drawing.selected > .card { outline: 1px solid var(--ink); }
 .el-drawing:has(.net-label) > .card { overflow: visible; }
+.net-zone-label { position: absolute; left: 14px; top: 10px; font: 700 14px/1.2 var(--sans); color: var(--ink); pointer-events: none; }
 .net-label { position: relative; left: 50%; transform: translateX(-50%); width: 180px; text-align: center; font: 600 13px/1.25 var(--sans); color: var(--ink); margin-top: 3px; } /* più larga dell'icona: nomi e IP non vanno a capo a metà */
 
 /* extras */

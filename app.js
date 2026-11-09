@@ -336,7 +336,7 @@ function ensureNode(el, force) {
   const card = h('div', 'card'); fresh.appendChild(card);
   BUILD[el.type]?.(el, card, fresh);
   // elementi creati o modificati da un agente: si vede sempre chi è stato (le note hanno già la loro intestazione)
-  if ((el.agentAuthor && el.type !== 'note' && !el.netLabel) || (el.agentEditedBy && !el.agentAuthor)) {
+  if ((el.agentAuthor && el.type !== 'note' && !el.netLabel && !el.netZone) || (el.agentEditedBy && !el.agentAuthor)) {
     const tag = h('div', 'agent-tag'); tag.textContent = el.agentAuthor ? `🤖 ${el.agentAuthor}` : `🤖 modificato da ${el.agentEditedBy}`;
     tag.title = el.agentAuthor ? 'Creato da un agente' : `Modificato da un agente${el.agentEditedAt ? ' il ' + new Date(el.agentEditedAt).toLocaleString('it-IT') : ''}`; fresh.appendChild(tag);
   }
@@ -521,6 +521,7 @@ const BUILD = {
   },
   drawing(el, card) {
     const c = h('div', 'drawing'); c.innerHTML = strokesSVG(el.strokes, el.vw, el.vh); card.appendChild(c);
+    if (el.netZone) { card.style.background = /^#[0-9a-f]{6}$/i.test(el.netFill || '') ? el.netFill + '1f' : 'rgba(0,0,0,.04)'; const z = h('div', 'net-zone-label'); z.textContent = el.netZone; card.appendChild(z); } // riquadro di sede o VLAN (add_network)
     if (el.netLabel) { const l = h('div', 'net-label'); l.textContent = el.netLabel; card.appendChild(l); } // nome dell'apparato (add_network)
   },
   image(el, card) {
