@@ -143,6 +143,8 @@
   const AUTO_TITLE = 'Startup gestita da agenti AI';
   const DEMO_BOARD_KEY9 = 'bacheca-demo-board-v12'; // canale autogestito da agenti (dati in demo-canale.json)
   const CANALE_TITLE = 'Canale autogestito: AGENTS, INC.';
+  const DEMO_BOARD_KEY10 = 'bacheca-demo-board-v13'; // servizio gestito da agenti, costi < 30 €/mese (dati in demo-servizio.json)
+  const SERVIZIO_TITLE = 'Servizio gestito da agenti: Vigilanza Prezzi';
   // board di un esperimento: «Leggi prima» a sinistra, le sezioni degli agenti copiate com'erano, una sotto-board
   // «dietro le quinte»; se la board esiste già viene svuotata e riempita (niente doppioni)
   function seedRunBoard({ title, nearTitle, color, emoji, lead, sezioni, subTitle, subCols }) {
@@ -196,7 +198,7 @@
     { id: 'l3', type: 'line', a: 'srv', b: 'brd', label: 'compiti', ...sig },
     { id: 'l4', type: 'line', a: 'srv', b: 'lav', label: 'disegni', ...sig },
   ];
-  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6) || !ls.get(DEMO_BOARD_KEY7) || !ls.get(DEMO_BOARD_KEY8) || !ls.get(DEMO_BOARD_KEY9))) seedDemoBoard(); });
+  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6) || !ls.get(DEMO_BOARD_KEY7) || !ls.get(DEMO_BOARD_KEY8) || !ls.get(DEMO_BOARD_KEY9) || !ls.get(DEMO_BOARD_KEY10))) seedDemoBoard(); });
   async function seedDemoBoard() {
     for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
     if (!S) return;
@@ -533,8 +535,28 @@
           subCols: [{ title: '📋 Piano e card', notes: [{ html: d.piano }, { html: d.card }] }, { title: '🎬 Episodio 0', notes: [{ html: d.script }] }, { title: '📨 Messaggi', notes: [{ html: d.messaggi }] }] });
       }
     }
+    // decima parte: servizio pagato dai clienti, gestito da agenti, costi sotto 30 € al mese
+    let servBid = null;
+    if (!ls.get(DEMO_BOARD_KEY10)) {
+      let d = null;
+      try { const r = await fetch('demo-servizio.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (d && Array.isArray(d.sezioni)) {
+        ls.set(DEMO_BOARD_KEY10, '1');
+        const Y = '#fff6d6';
+        servBid = seedRunBoard({ title: SERVIZIO_TITLE, nearTitle: CANALE_TITLE, color: '#d6f5ee', emoji: '🔎', sezioni: d.sezioni, subTitle: 'Dietro le quinte: piano, card, messaggi',
+          lead: [
+            { color: Y, html: '<p><b>🔎 Cosa è successo</b></p><p>5 agenti Claude Code, obiettivo: un\'attività semplice e redditizia, gestita da agenti, con <b>costi di funzionamento sotto 30 € al mese</b> e un <b>ricavo da clienti che pagano</b> (niente pubblico o pubblicità). Idee già viste escluse.</p><p>4 giri in circa 24 minuti, 26 card, 27 messaggi, circa 16 $. Il primo tentativo si è fermato per il limite di utilizzo dell\'account; <b>è ripartito da solo</b> di notte con una ripresa programmata, dal giro interrotto.</p>' },
+            { color: Y, html: '<p><b>💡 L\'idea: «Vigilanza Prezzi»</b></p><p>Un piccolo e-commerce indica fino a 15 pagine di prodotti dei concorrenti; gli agenti controllano i prezzi 2–3 volte a settimana e mandano un riepilogo settimanale più un avviso immediato se un concorrente scende sotto una soglia.</p><ul><li><b>Prezzo</b>: 19 € al mese (8 prodotti) o 29 € (15), pagamento automatico.</li><li><b>Costi</b>: circa 3–13 € al mese fino a 100 clienti (AI, email e server nei piani gratuiti o quasi), calcolati due volte da agenti diversi.</li><li><b>Pareggio</b>: basta un cliente pagante.</li><li>6 agenti: attivazione e pagamenti, raccolta prezzi, riepiloghi, email, assistenza, controllo qualità.</li></ul>' },
+            { color: Y, html: '<p><b>⚖️ Il punto debole, detto da loro</b></p><p>I costi non sono il problema: <b>lo è trovare i clienti</b>. Senza pubblicità restano i contatti diretti, stimati in 0,3–3 nuovi clienti al mese. Hanno anche scoperto un rischio legale vero: in Italia le email commerciali automatiche richiedono il consenso preventivo <b>anche verso le aziende</b>. E alcuni siti vietano la raccolta automatica dei prezzi: solo pagine indicate dal cliente, rispetto di robots.txt, stop se un sito blocca.</p>' },
+            { color: '#e3f6e8', html: '<p><b>✅ Verifica indipendente</b></p><ul><li>87–91 mila e-commerce in Italia, oltre il 90% micro e piccole imprese (Netcomm-Cribis): <b>vero</b>.</li><li>Consenso preventivo per le email commerciali anche verso le aziende (art. 130 Codice Privacy, Garante 2012): <b>vero</b>.</li><li>Concorrente Prisync da 99 a 399 $ al mese: <b>parziale</b>, alcune fonti indicano un piano base da circa 59 $. Resta comunque più caro dei 19 € proposti.</li></ul>' },
+            { color: '#fde2e4', html: '<p><b>⚠️ Cosa non è</b></p><ul><li>Nessun cliente reale, nessun sito controllato: è un progetto pronto da valutare.</li><li>Alla persona restano partita IVA, conto per i pagamenti, dominio, approvazione dei testi legali e del primo invio di email.</li><li>Il coordinamento ha avuto doppioni (tre card «PIANO»), in parte dovuti al giro interrotto e ripreso: li hanno chiusi o fusi da soli.</li></ul>' },
+          ],
+          subCols: [{ title: '📋 Piano e card', notes: [{ html: d.piano }, { html: d.card }] }, { title: '📨 Messaggi', notes: [{ html: d.messaggi }] }] });
+      }
+    }
     commit();
-    if (canaleBid && !opened) { openBoard(canaleBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il canale autogestito, nella board «' + CANALE_TITLE + '»'); }
+    if (servBid && !opened) { openBoard(servBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il servizio gestito da agenti, nella board «' + SERVIZIO_TITLE + '»'); }
+    else if (canaleBid && !opened) { openBoard(canaleBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: il canale autogestito, nella board «' + CANALE_TITLE + '»'); }
     else if (autoBid && !opened) { openBoard(autoBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la startup gestita da agenti AI, nella board «' + AUTO_TITLE + '»'); }
     else if (foundBid && !opened) { openBoard(foundBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la startup fondata dagli agenti, nella board «' + FOUND_TITLE + '»'); }
     else if (startBid && !opened) { openBoard(startBid); requestAnimationFrame(() => { setZoom(Math.min(1, VP().clientWidth / 460)); VP().scrollLeft = 0; VP().scrollTop = 0; }); toast('Novità: la simulazione «' + START_TITLE + '»'); }
