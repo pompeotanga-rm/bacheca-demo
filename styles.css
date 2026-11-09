@@ -310,6 +310,8 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 .el-drawing > .card { background: transparent; box-shadow: none; }
 .el-drawing .drawing svg { display: block; width: 100%; height: auto; }
 .el-drawing.selected > .card { outline: 1px solid var(--ink); }
+.el-drawing:has(.net-label) > .card { overflow: visible; }
+.net-label { position: relative; left: 50%; transform: translateX(-50%); width: 180px; text-align: center; font: 600 13px/1.25 var(--sans); color: var(--ink); margin-top: 3px; } /* più larga dell'icona: nomi e IP non vanno a capo a metà */
 
 /* extras */
 .x-title { font-weight: 600; font-size: 14px; line-height: 20px; padding: 0 0 8px; }

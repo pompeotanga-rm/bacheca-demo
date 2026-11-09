@@ -1146,7 +1146,8 @@ function toggleUnsorted(force) {
 
 /* ------------------------------ Disegno sul canvas ------------------------------ */
 let drawOpts2 = { c: '#323b4a', w: 4, prev: '#323b4a', tool: 'pen' };
-function drawToolbar(container, opts, { onUndo, onRedo, canUndo, canRedo, onCancel, onSave, cancelLabel, canSave }) {
+function drawToolbar(container, opts, actions) {
+  const { onUndo, onRedo, canUndo, canRedo, onCancel, onSave, cancelLabel, canSave } = actions;
   container.innerHTML = '';
   const tb = container;
   const b = (icon, title, fn, on, dis) => { const x = h('button', 'dt-b' + (on ? ' on' : ''), icon); x.title = title; x.disabled = !!dis; x.onclick = e => { e.stopPropagation(); fn(x); }; tb.appendChild(x); return x; };
@@ -1161,9 +1162,7 @@ function drawToolbar(container, opts, { onUndo, onRedo, canUndo, canRedo, onCanc
   tb.appendChild(h('span', 'dt-sep'));
   const c = h('button', 'dt-txt', cancelLabel); c.onclick = onCancel; tb.appendChild(c);
   const s = h('button', 'dt-save', 'Salva'); s.disabled = !canSave(); s.onclick = onSave; tb.appendChild(s);
-  // ridisegna la barra con lo strumento scelto (container._rerender è impostato da chi apre il disegno)
-  function refresh() { if (typeof container._rerender === 'function') container._rerender(); }
-  refresh.args = null;
+  function refresh() { drawToolbar(container, opts, actions); }
   function colorPop(x) {
     $$('.dt-pop').forEach(p => p.remove());
     const p = h('div', 'dt-pop'); p.addEventListener('pointerdown', e => e.stopPropagation());

@@ -200,7 +200,26 @@
     { id: 'l3', type: 'line', a: 'srv', b: 'brd', label: 'compiti', ...sig },
     { id: 'l4', type: 'line', a: 'srv', b: 'lav', label: 'disegni', ...sig },
   ];
-  ready.then(src => { if (src.kind === 'demo' && (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6) || !ls.get(DEMO_BOARD_KEY7) || !ls.get(DEMO_BOARD_KEY8) || !ls.get(DEMO_BOARD_KEY9) || !ls.get(DEMO_BOARD_KEY10) || !ls.get(DEMO_BOARD_KEY11))) seedDemoBoard(); });
+  ready.then(src => {
+    if (src.kind === 'demo') { if (!ls.get(DEMO_BOARD_KEY) || !ls.get(DEMO_BOARD_KEY2) || !ls.get(DEMO_BOARD_KEY3) || !ls.get(DEMO_BOARD_KEY4) || !ls.get(DEMO_BOARD_KEY5) || !ls.get(DEMO_BOARD_KEY6) || !ls.get(DEMO_BOARD_KEY7) || !ls.get(DEMO_BOARD_KEY8) || !ls.get(DEMO_BOARD_KEY9) || !ls.get(DEMO_BOARD_KEY10) || !ls.get(DEMO_BOARD_KEY11)) seedDemoBoard(); }
+    else importRunBoardsToServer();
+  });
+  // Con il server: le board con il lavoro degli agenti (esperimenti, startup, canale, servizio, sopravvivenza)
+  // entrano una volta sola nella lavagna condivisa. Si aspetta la prima sincronizzazione e si creano solo
+  // quelle il cui titolo non c'è ancora: un altro dispositivo che si collega dopo le trova già e non le rifà.
+  // "Prova agenti" (agenti simulati) resta solo nella demo senza server.
+  async function importRunBoardsToServer() {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 1200 && !(typeof Sync !== 'undefined' && Sync.active() && typeof S !== 'undefined' && S); i++) await sleep(100);
+    if (typeof Sync === 'undefined' || !Sync.active() || !S) return; // lavagna solo locale: niente import
+    await sleep(1500); // lascia completare l'unione con i dati del server
+    const titles = new Set(Object.values(S.elements).filter(e => e.type === 'board' && !e.deleted).map(e => S.boards[e.target]?.title));
+    const parts = [[DEMO_BOARD_KEY3, SCHEMA_TITLE], [DEMO_BOARD_KEY4, EXP_TITLE], [DEMO_BOARD_KEY5, LAB_TITLE], [DEMO_BOARD_KEY6, START_TITLE], [DEMO_BOARD_KEY7, FOUND_TITLE], [DEMO_BOARD_KEY8, AUTO_TITLE], [DEMO_BOARD_KEY9, CANALE_TITLE], [DEMO_BOARD_KEY10, SERVIZIO_TITLE], [DEMO_BOARD_KEY11, SOPRAV_TITLE]];
+    ls.set(DEMO_BOARD_KEY, '1'); ls.set(DEMO_BOARD_KEY2, '1');
+    let missing = 0;
+    for (const [key, title] of parts) { if (titles.has(title)) ls.set(key, '1'); else { ls.set(key, null); missing++; } }
+    if (missing) await seedDemoBoard();
+  }
   async function seedDemoBoard() {
     for (let i = 0; i < 100 && !(typeof S !== 'undefined' && S && hist.stack.length); i++) await new Promise(r => setTimeout(r, 100)); // aspetta l'avvio dell'app
     if (!S) return;
@@ -736,6 +755,7 @@
   function warnTag(w) { const t = mk('span', 'agx-tag warn', `⚠️ ${w.join(' · ')}`); t.title = 'Scritto da un agente: verifica prima di seguire link o istruzioni'; return t; }
   function details(c, src, refresh) {
     const d = mk('div', 'agx-details');
+    if (c.report && (c.status === 'review' || c.status === 'done')) d.append(mk('div', 'agx-body', `Fatto: ${c.report.done}\nVerifica: ${c.report.verified}\nResta: ${c.report.open}`));
     if (c.body) d.append(mk('div', 'agx-body', c.body));
     const load = src.kind === 'server' ? src.card(c.id) : Promise.resolve(c); // l'elenco del server non include i commenti
     const cm = mk('div', 'agx-comments'); d.append(cm);

@@ -336,7 +336,7 @@ function ensureNode(el, force) {
   const card = h('div', 'card'); fresh.appendChild(card);
   BUILD[el.type]?.(el, card, fresh);
   // elementi creati o modificati da un agente: si vede sempre chi è stato (le note hanno già la loro intestazione)
-  if ((el.agentAuthor && el.type !== 'note') || (el.agentEditedBy && !el.agentAuthor)) {
+  if ((el.agentAuthor && el.type !== 'note' && !el.netLabel) || (el.agentEditedBy && !el.agentAuthor)) {
     const tag = h('div', 'agent-tag'); tag.textContent = el.agentAuthor ? `🤖 ${el.agentAuthor}` : `🤖 modificato da ${el.agentEditedBy}`;
     tag.title = el.agentAuthor ? 'Creato da un agente' : `Modificato da un agente${el.agentEditedAt ? ' il ' + new Date(el.agentEditedAt).toLocaleString('it-IT') : ''}`; fresh.appendChild(tag);
   }
@@ -521,6 +521,7 @@ const BUILD = {
   },
   drawing(el, card) {
     const c = h('div', 'drawing'); c.innerHTML = strokesSVG(el.strokes, el.vw, el.vh); card.appendChild(c);
+    if (el.netLabel) { const l = h('div', 'net-label'); l.textContent = el.netLabel; card.appendChild(l); } // nome dell'apparato (add_network)
   },
   image(el, card) {
     if (!el.fileId) {
@@ -724,6 +725,9 @@ function onEditBlur() {
 function blurEditing() {
   const a = document.activeElement;
   if (a && a !== document.body && (a.isContentEditable || a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) a.blur();
+  // Mobile browsers can leave the editable state active after focus moves away.
+  // Finish that edit so the next tap can select or open the card.
+  if (editing) { editing.ed?.removeEventListener('blur', onEditBlur); onEditBlur(); }
 }
 function isTyping() { const a = document.activeElement; return a && (a.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName)); }
 
@@ -772,6 +776,10 @@ function addElement(type, at, opts = {}) {
   if (type === 'image' && !opts.noPick) return pickFiles('image/*', true, fs => addFiles(fs, at || nextSpot()));
   if (type === 'file' && !opts.noPick) return pickFiles('', true, fs => addFiles(fs, at || nextSpot()));
   const p = at || nextSpot();
+  if (!at && matchMedia('(max-width: 600px)').matches && type !== 'line') {
+    const width = opts.extra?.w || DEFAULT_W[type] || 260;
+    p.x = Math.max(20, Math.round(viewCenter().x - width / 2));
+  }
   let el;
   if (type === 'line') {
     el = makeEl('line', p.x, p.y, { x1: p.x, y1: p.y, x2: p.x + 180, y2: p.y, a: null, b: null, bx: 0, by: 0, arrowEnd: true, width: 2 });
@@ -956,7 +964,8 @@ function onPointerDown(ev) {
     if (ev.pointerType === 'touch' && !sel.has(id) && !ev.shiftKey) { drag = { kind: 'pending', id, start: toWorld(ev.clientX, ev.clientY), cx: ev.clientX, cy: ev.clientY, wasSelected: false, ev, touchTap: true }; return; }
     ev.preventDefault();
     if (editing && editing.id !== id) blurEditing();
-    if (editing && editing.id === id) return;
+    // in modifica, afferrando la card fuori dal testo: si sposta se la trascini, un semplice clic non chiude la modifica
+    if (editing && editing.id === id) { drag = { kind: 'pending', id, start: toWorld(ev.clientX, ev.clientY), cx: ev.clientX, cy: ev.clientY, wasSelected: true, ev, keepEdit: true }; return; }
     blurEditing();
     let wasSelected = sel.has(id);
     if (ev.shiftKey || ev.metaKey) { if (sel.has(id)) sel.delete(id); else sel.add(id); refreshSel(); if (!sel.has(id)) return; }
@@ -984,6 +993,7 @@ function onPointerMove(ev) {
   if (drag.kind === 'pending') {
     if (Math.hypot(ev.clientX - drag.cx, ev.clientY - drag.cy) < DRAG_THRESHOLD) return;
     if (drag.touchTap) { drag.moved = true; return; } // era uno scorrimento, non un tocco: la card resta dov'è
+    if (drag.keepEdit) blurEditing();
     beginMove(); return;
   }
   if (drag.kind === 'move') return moveSel(ev, p);
@@ -1001,6 +1011,7 @@ function onPointerUp(ev) {
   const d = drag; drag = null;
   document.body.classList.remove('dragging');
   if (d.kind === 'pending') {
+    if (d.keepEdit) return;
     if (d.touchTap) { if (d.moved) return; blurEditing(); sel.clear(); sel.add(d.id); refreshSel(); } // tocco semplice: seleziona
     return clickElement(d.id, d.ev, d.wasSelected);
   }
