@@ -1,6 +1,6 @@
 // Elemento "Agenti" della lavagna: un riquadro da mettere su qualsiasi board che mostra dal vivo
 // il lavoro degli agenti di un progetto e permette di approvare, rifiutare e commentare.
-// - Con il server (bancheca, node server.js) usa lo spazio agenti vero (stesso token di agenti.html).
+// - Con il server (node server.js) usa lo spazio agenti vero (stesso token di agenti.html).
 // - Senza server (demo su GitHub Pages) funziona con dati di esempio salvati solo in questo browser,
 //   e un pulsante simula il lavoro di un agente.
 // Tutto il testo delle card è inserito come testo, mai come HTML.
@@ -148,23 +148,16 @@
   const DEMO_BOARD_KEY11 = 'bacheca-demo-board-v14'; // gioco di sopravvivenza: 5 agenti, 2 spenti (dati in demo-sopravvivenza.json)
   const SOPRAV_TITLE = 'Gioco di sopravvivenza: 5 agenti, 2 spenti';
   // board di un esperimento: «Leggi prima» a sinistra, le sezioni degli agenti copiate com'erano, una sotto-board
-  // «dietro le quinte»; se la board esiste già viene svuotata e riempita (niente doppioni)
+  // «dietro le quinte»; se la board esiste già non viene toccata: potrebbe contenere note aggiunte dall'utente
   function seedRunBoard({ title, nearTitle, color, emoji, lead, sezioni, subTitle, subCols }) {
     const prev = cur; cur = 'home';
-    let bid;
     const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === title);
-    if (old) {
-      bid = old.target;
-      const subs = new Set(Object.values(S.boards).filter(x => x.parent === bid).map(x => x.id));
-      for (const e of Object.values(S.elements)) if (e.board === bid || subs.has(e.board)) delete S.elements[e.id];
-      for (const x of subs) delete S.boards[x];
-    } else {
-      const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
-      const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === nearTitle);
-      const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title });
-      const b = S.boards[bel.target]; b.color = color; b.colorSet = true; b.icon = { type: 'emoji', ch: emoji }; b.named = true;
-      bid = b.id;
-    }
+    if (old) { cur = prev; return old.target; }
+    const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+    const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === nearTitle);
+    const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title });
+    const b = S.boards[bel.target]; b.color = color; b.colorSet = true; b.icon = { type: 'emoji', ch: emoji }; b.named = true;
+    const bid = b.id;
     cur = bid;
     const col = (board, x, w, t, notes) => { const c = makeEl('column', x, 40, { board, w, title: t }); for (const n of notes) { const el = makeEl('note', 0, 0, { board, w: w - 20, ...n }); el.col = c.id; c.items.push(el.id); } return c; };
     const leadCol = col(bid, 40, 400, '📖 Leggi prima', lead);
@@ -257,27 +250,25 @@
     let schemaBid = null;
     if (!ls.get(DEMO_BOARD_KEY3)) {
       ls.set(DEMO_BOARD_KEY3, '1');
-      const prev = cur; cur = 'home';
       const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === SCHEMA_TITLE);
-      if (old) { // versione precedente, illeggibile: la svuota e la riempie di nuovo
-        schemaBid = old.target;
-        for (const e of Object.values(S.elements)) if (e.board === schemaBid) delete S.elements[e.id];
-      } else {
+      if (old) schemaBid = old.target; // esiste già: non si svuota, potrebbe contenere aggiunte dell'utente
+      else {
+        const prev = cur; cur = 'home';
         const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
         const pa = home.find(e => e.type === 'board' && S.boards[e.target]?.title === 'Prova agenti');
         const bel = makeEl('board', pa ? pa.x + 160 : 40, pa ? pa.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: SCHEMA_TITLE });
         const b = S.boards[bel.target]; b.color = '#d9cff7'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🗺️' }; b.named = true;
         schemaBid = b.id;
+        const ids = {}; for (const e of DEMO_SCHEMA) ids[e.id] = uid();
+        for (const e of DEMO_SCHEMA) { // riquadri prima, frecce per ultime
+          const { id, type, x = 0, y = 0, ...rest } = e;
+          const extra = { ...rest, board: schemaBid };
+          if (type === 'line') Object.assign(extra, { x1: 0, y1: 0, x2: 0, y2: 0, a: ids[e.a], b: ids[e.b], bx: 0, by: 0, arrowEnd: true, width: 2 });
+          const el = makeEl(type, x, y, extra);
+          delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el;
+        }
+        cur = prev;
       }
-      const ids = {}; for (const e of DEMO_SCHEMA) ids[e.id] = uid();
-      for (const e of DEMO_SCHEMA) { // riquadri prima, frecce per ultime
-        const { id, type, x = 0, y = 0, ...rest } = e;
-        const extra = { ...rest, board: schemaBid };
-        if (type === 'line') Object.assign(extra, { x1: 0, y1: 0, x2: 0, y2: 0, a: ids[e.a], b: ids[e.b], bx: 0, by: 0, arrowEnd: true, width: 2 });
-        const el = makeEl(type, x, y, extra);
-        delete S.elements[el.id]; el.id = ids[id]; S.elements[el.id] = el;
-      }
-      cur = prev;
     }
     // quarta parte: l'esperimento con 4 agenti Claude Code sulla stessa board, fatto due volte.
     // Giro 1: il server MCP chiedeva coordinate in pixel → board enorme, sovrapposizioni, 28 spostamenti.
@@ -285,27 +276,23 @@
     // La board mostra il giro 2 così com'è uscito; il giro 1 resta dentro, intatto, per confronto.
     let expBid = null;
     if (!ls.get(DEMO_BOARD_KEY4)) {
+      const oldExp = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === EXP_TITLE);
+      if (oldExp) { ls.set(DEMO_BOARD_KEY4, '1'); expBid = oldExp.target; } // esiste già: non si svuota, potrebbe contenere aggiunte dell'utente
       let g1 = null, g2 = null;
-      try {
-        const [r1, r2] = await Promise.all([fetch('demo-esperimento.json', { cache: 'no-cache' }), fetch('demo-esperimento-2.json', { cache: 'no-cache' })]);
-        if (r1.ok && r2.ok) { g1 = await r1.json(); g2 = await r2.json(); }
-      } catch { /* demo offline: si riprova la prossima volta */ }
+      if (!oldExp) {
+        try {
+          const [r1, r2] = await Promise.all([fetch('demo-esperimento.json', { cache: 'no-cache' }), fetch('demo-esperimento-2.json', { cache: 'no-cache' })]);
+          if (r1.ok && r2.ok) { g1 = await r1.json(); g2 = await r2.json(); }
+        } catch { /* demo offline: si riprova la prossima volta */ }
+      }
       if (Array.isArray(g1) && g1.length && g2 && Array.isArray(g2.elements)) {
         ls.set(DEMO_BOARD_KEY4, '1');
         const prev = cur; cur = 'home';
-        const oldEl = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === EXP_TITLE);
-        if (oldEl) { // versione precedente: la svuota (anche le sue sotto-board) e la riempie di nuovo
-          expBid = oldEl.target;
-          const subs = new Set(Object.values(S.boards).filter(b => b.parent === expBid).map(b => b.id));
-          for (const e of Object.values(S.elements)) if (e.board === expBid || subs.has(e.board)) delete S.elements[e.id];
-          for (const b of subs) delete S.boards[b];
-        } else {
-          const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
-          const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === SCHEMA_TITLE);
-          const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: EXP_TITLE });
-          const b = S.boards[bel.target]; b.color = '#ffe2c6'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🧪' }; b.named = true;
-          expBid = b.id;
-        }
+        const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+        const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === SCHEMA_TITLE);
+        const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: EXP_TITLE });
+        const b = S.boards[bel.target]; b.color = '#ffe2c6'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🧪' }; b.named = true;
+        expBid = b.id;
         const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         // copia fedele di una serie di elementi in una board, con id nuovi e spostamento orizzontale
         const copyAll = (data, bid, dx, dy) => {
@@ -343,24 +330,18 @@
     // quinta parte: il laboratorio di idee sull'applicazione (3 agenti, 4 giri) e la prova reale che ne è seguita
     let labBid = null;
     if (!ls.get(DEMO_BOARD_KEY5)) {
+      const oldLab = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === LAB_TITLE);
+      if (oldLab) { ls.set(DEMO_BOARD_KEY5, '1'); labBid = oldLab.target; } // esiste già: non si svuota, potrebbe contenere aggiunte dell'utente
       let data = null;
-      try { const r = await fetch('demo-laboratorio.json', { cache: 'no-cache' }); if (r.ok) data = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (!oldLab) { try { const r = await fetch('demo-laboratorio.json', { cache: 'no-cache' }); if (r.ok) data = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ } }
       if (data && data.lab && Array.isArray(data.prova)) {
         ls.set(DEMO_BOARD_KEY5, '1');
         const prev = cur; cur = 'home';
-        const oldLab = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === LAB_TITLE);
-        if (oldLab) { // già presente: la svuota (anche le sotto-board) e la riempie di nuovo, senza doppioni
-          labBid = oldLab.target;
-          const subs = new Set(Object.values(S.boards).filter(x => x.parent === labBid).map(x => x.id));
-          for (const e of Object.values(S.elements)) if (e.board === labBid || subs.has(e.board)) delete S.elements[e.id];
-          for (const x of subs) delete S.boards[x];
-        } else {
-          const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
-          const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === EXP_TITLE);
-          const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: LAB_TITLE });
-          const b = S.boards[bel.target]; b.color = '#cfe8ff'; b.colorSet = true; b.icon = { type: 'emoji', ch: '💡' }; b.named = true;
-          labBid = b.id;
-        }
+        const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+        const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === EXP_TITLE);
+        const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: LAB_TITLE });
+        const b = S.boards[bel.target]; b.color = '#cfe8ff'; b.colorSet = true; b.icon = { type: 'emoji', ch: '💡' }; b.named = true;
+        labBid = b.id;
         const copy = (list, bid, dx, dy) => { // copia fedele con id nuovi (colonne, frecce e discussioni restano collegate)
           const ids = {}; for (const e of list) ids[e.id] = uid();
           for (const e of list) {
@@ -398,24 +379,18 @@
     // sesta parte: la simulazione "startup in 10 minuti" (5 agenti Claude Code reali coordinati da un orchestratore)
     let startBid = null;
     if (!ls.get(DEMO_BOARD_KEY6)) {
+      const oldStart = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === START_TITLE);
+      if (oldStart) { ls.set(DEMO_BOARD_KEY6, '1'); startBid = oldStart.target; } // esiste già: non si svuota, potrebbe contenere aggiunte dell'utente
       let d = null;
-      try { const r = await fetch('demo-startup.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (!oldStart) { try { const r = await fetch('demo-startup.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ } }
       if (d && Array.isArray(d.cols)) {
         ls.set(DEMO_BOARD_KEY6, '1');
         const prev = cur; cur = 'home';
-        const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === START_TITLE);
-        if (old) {
-          startBid = old.target;
-          const subs = new Set(Object.values(S.boards).filter(x => x.parent === startBid).map(x => x.id));
-          for (const e of Object.values(S.elements)) if (e.board === startBid || subs.has(e.board)) delete S.elements[e.id];
-          for (const x of subs) delete S.boards[x];
-        } else {
-          const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
-          const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === LAB_TITLE);
-          const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: START_TITLE });
-          const b = S.boards[bel.target]; b.color = '#ffd9c2'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🚀' }; b.named = true;
-          startBid = b.id;
-        }
+        const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+        const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === LAB_TITLE);
+        const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: START_TITLE });
+        const b = S.boards[bel.target]; b.color = '#ffd9c2'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🚀' }; b.named = true;
+        startBid = b.id;
         cur = startBid;
         const col = (x, y, w, title, notes) => { const c = makeEl('column', x, y, { board: startBid, w, title }); for (const n of notes) { const el = makeEl('note', 0, 0, { board: startBid, w: w - 20, ...n, agentSession: n.agentAuthor ? n.agentAuthor.slice(0, 4) : undefined }); el.col = c.id; c.items.push(el.id); } return c; };
         const Y = '#fff6d6', R = d.report.agenti;
@@ -443,24 +418,18 @@
     // settima parte: 5 agenti con il solo obiettivo, ricerca sul web e nessuna organizzazione imposta
     let foundBid = null;
     if (!ls.get(DEMO_BOARD_KEY7)) {
+      const oldFound = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === FOUND_TITLE);
+      if (oldFound) { ls.set(DEMO_BOARD_KEY7, '1'); foundBid = oldFound.target; } // esiste già: non si svuota, potrebbe contenere aggiunte dell'utente
       let d = null;
-      try { const r = await fetch('demo-startup2.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (!oldFound) { try { const r = await fetch('demo-startup2.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ } }
       if (d && Array.isArray(d.pitch)) {
         ls.set(DEMO_BOARD_KEY7, '1');
         const prev = cur; cur = 'home';
-        const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === FOUND_TITLE);
-        if (old) {
-          foundBid = old.target;
-          const subs = new Set(Object.values(S.boards).filter(x => x.parent === foundBid).map(x => x.id));
-          for (const e of Object.values(S.elements)) if (e.board === foundBid || subs.has(e.board)) delete S.elements[e.id];
-          for (const x of subs) delete S.boards[x];
-        } else {
-          const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
-          const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === START_TITLE);
-          const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: FOUND_TITLE });
-          const b = S.boards[bel.target]; b.color = '#d5f0dc'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🧹' }; b.named = true;
-          foundBid = b.id;
-        }
+        const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+        const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === START_TITLE);
+        const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: FOUND_TITLE });
+        const b = S.boards[bel.target]; b.color = '#d5f0dc'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🧹' }; b.named = true;
+        foundBid = b.id;
         cur = foundBid;
         const col = (bid, x, w, title, notes) => { const c = makeEl('column', x, 40, { board: bid, w, title }); for (const n of notes) { const el = makeEl('note', 0, 0, { board: bid, w: w - 20, ...n }); el.col = c.id; c.items.push(el.id); } return c; };
         const Y = '#fff6d6';
@@ -490,24 +459,18 @@
     // ottava parte: startup gestita da agenti (nessuna assunzione), con una regola minima di coordinamento
     let autoBid = null;
     if (!ls.get(DEMO_BOARD_KEY8)) {
+      const oldAuto = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === AUTO_TITLE);
+      if (oldAuto) { ls.set(DEMO_BOARD_KEY8, '1'); autoBid = oldAuto.target; } // esiste già: non si svuota, potrebbe contenere aggiunte dell'utente
       let d = null;
-      try { const r = await fetch('demo-startup3.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ }
+      if (!oldAuto) { try { const r = await fetch('demo-startup3.json', { cache: 'no-cache' }); if (r.ok) d = await r.json(); } catch { /* demo offline: si riprova la prossima volta */ } }
       if (d && Array.isArray(d.sezioni)) {
         ls.set(DEMO_BOARD_KEY8, '1');
         const prev = cur; cur = 'home';
-        const old = Object.values(S.elements).find(e => e.type === 'board' && !e.deleted && S.boards[e.target]?.title === AUTO_TITLE);
-        if (old) {
-          autoBid = old.target;
-          const subs = new Set(Object.values(S.boards).filter(x => x.parent === autoBid).map(x => x.id));
-          for (const e of Object.values(S.elements)) if (e.board === autoBid || subs.has(e.board)) delete S.elements[e.id];
-          for (const x of subs) delete S.boards[x];
-        } else {
-          const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
-          const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === FOUND_TITLE);
-          const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: AUTO_TITLE });
-          const b = S.boards[bel.target]; b.color = '#dfe7ff'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🤖' }; b.named = true;
-          autoBid = b.id;
-        }
+        const home = Object.values(S.elements).filter(e => e.board === 'home' && !e.deleted && e.type !== 'line');
+        const near = home.find(e => e.type === 'board' && S.boards[e.target]?.title === FOUND_TITLE);
+        const bel = makeEl('board', near ? near.x + 160 : 40, near ? near.y : (home.length ? Math.max(...home.map(e => e.y)) + 170 : 60), { title: AUTO_TITLE });
+        const b = S.boards[bel.target]; b.color = '#dfe7ff'; b.colorSet = true; b.icon = { type: 'emoji', ch: '🤖' }; b.named = true;
+        autoBid = b.id;
         cur = autoBid;
         const col = (bid, x, w, title, notes) => { const c = makeEl('column', x, 40, { board: bid, w, title }); for (const n of notes) { const el = makeEl('note', 0, 0, { board: bid, w: w - 20, ...n }); el.col = c.id; c.items.push(el.id); } return c; };
         const Y = '#fff6d6';

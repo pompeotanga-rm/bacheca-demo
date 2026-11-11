@@ -48,12 +48,13 @@ const Sync = (() => {
     if (body !== undefined) headers['Content-Type'] = raw ? (body.type || 'application/octet-stream') : 'application/json';
     const r = await fetch(path, { method, headers, body: body === undefined ? undefined : raw ? body : typeof body === 'string' ? body : JSON.stringify(body) });
     if (r.status === 401) { disconnect('Il token non è più valido: accedi di nuovo'); const e = new Error('non autorizzato'); e.auth = true; throw e; }
-    let j = null; try { j = await r.json(); } catch { }
+    let j = null;
+    try { j = await r.json(); } catch { j = null; }
     if (!r.ok) { const e = new Error(j?.error || `Errore ${r.status}`); e.status = r.status; throw e; }
     return j;
   }
-  const saveMeta = () => DB.put('kv', 'sync', { rev, base: Object.fromEntries(base), user: me?.name || null }).catch(() => { });
-  const saveLocal = () => DB.put('kv', 'state', S).catch(() => { });
+  const saveMeta = () => DB.put('kv', 'sync', { rev, base: Object.fromEntries(base), user: me?.name || null }).catch(err => console.warn('Salvataggio metadati sync non riuscito:', err));
+  const saveLocal = () => DB.put('kv', 'state', S).catch(err => console.warn('Salvataggio stato locale non riuscito:', err));
 
   /* ------------------------------ indicatore ------------------------------ */
   const LABEL = { local: 'Solo su questo dispositivo', ok: 'Sincronizzata con il server', sync: 'Sincronizzazione…', offline: 'Server non raggiungibile: le modifiche partiranno appena torna', error: 'Errore di sincronizzazione' };
@@ -115,7 +116,8 @@ const Sync = (() => {
 
   function disconnect(msg, keepToken) {
     const wasActive = active;
-    active = false; if (es) { es.close(); es = null; }
+    active = false; connectGen++; // le richieste già in volo diventano superate: la loro risposta non tocca più i dati
+    if (es) { es.close(); es = null; }
     ls.set(TOKEN_KEY, null); if (keepToken) ls.set(MODE_KEY, 'local'); // scollegato a mano: non richiedere l'accesso a ogni avvio
     DB.del('kv', 'sync').catch(() => { }); base = new Map(); rev = 0; me = null;
     setStatus('local');
@@ -162,7 +164,14 @@ const Sync = (() => {
   function listen() {
     if (es) es.close();
     es = new EventSource(`/api/board/events?token=${encodeURIComponent(ls.get(TOKEN_KEY) || '')}`);
-    es.addEventListener('lavagna', e => { let d = {}; try { d = JSON.parse(e.data); } catch { } if (d.rev > rev) pull(); });
+    es.addEventListener('lavagna', e => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d && d.rev > rev) pull();
+      } catch {
+        // Ignora payload SSE malformati
+      }
+    });
     es.addEventListener('hello', () => { if (active) { pull(); schedulePush(0); } });
     es.onerror = () => { if (active && status !== 'sync') setStatus('offline'); };
   }
@@ -175,14 +184,16 @@ const Sync = (() => {
     const changes = localChanges();
     if (!changes.length) { if (status !== 'offline') setStatus('ok'); return; }
     pushing = true; setStatus('sync');
+    const gen = connectGen;
     const body = `{"baseRev":${rev},"changes":[${changes.map(c => `{"k":${JSON.stringify(c.k)},"v":${c.s}}`).join(',')}]}`;
     try {
       const r = await api('PATCH', '/api/lavagna', body);
+      if (!active || gen !== connectGen) return; // scollegato (o ricollegato) nel frattempo
       for (const c of changes) c.hs === null ? base.delete(c.k) : base.set(c.k, c.hs);
       if (r.others?.length) applyRemote(r.others);
       rev = Math.max(rev, r.rev); saveMeta(); retryMs = 0; setStatus('ok');
     } catch (e) {
-      if (e.auth) return;
+      if (e.auth || !active || gen !== connectGen) return;
       setStatus(e.status ? 'error' : 'offline');
       if (e.status === 413 || e.status === 400) toast(`Sincronizzazione rifiutata dal server: ${e.message}`);
       retryMs = Math.min(60000, retryMs ? retryMs * 2 : 5000); schedulePush(retryMs);
@@ -199,8 +210,13 @@ const Sync = (() => {
     if (!active) return;
     if (pushing || pulling) { pullAfter = true; return; } // mai in parallelo con un invio: la revisione resta coerente
     pulling = true;
-    try { const r = await api('GET', `/api/lavagna/changes?since=${rev}`); if (r.changes.length) applyRemote(r.changes); rev = Math.max(rev, r.rev); saveMeta(); if (status === 'offline') setStatus('ok'); }
-    catch (e) { if (!e.auth) setStatus('offline'); }
+    const gen = connectGen;
+    try {
+      const r = await api('GET', `/api/lavagna/changes?since=${rev}`);
+      if (!active || gen !== connectGen) return; // scollegato (o ricollegato) nel frattempo
+      if (r.changes.length) applyRemote(r.changes); rev = Math.max(rev, r.rev); saveMeta(); if (status === 'offline') setStatus('ok');
+    }
+    catch (e) { if (!e.auth && active && gen === connectGen) setStatus('offline'); }
     finally { pulling = false; if (pullAfter && !pushing) { pullAfter = false; pull(); } }
   }
 

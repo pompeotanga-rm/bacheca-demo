@@ -245,12 +245,30 @@ BUILD.video = function (el, card) {
     urlInput(card, '<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M10 9l5 3-5 3z"/></svg>', 'Incolla un link da YouTube o Vimeo', v => { let u = v.trim(); if (!/^[a-z]+:\/\//i.test(u)) u = 'https://' + u; el.url = u; rebuild(el); commit(); unfurlInto(el); });
     return;
   }
+  const bar = h('div', 'media-head');
+  const grip = h('button', 'media-drag-handle', '⠿ Sposta');
+  grip.type = 'button';
+  grip.title = 'Trascina qui per spostare il video';
+  bar.appendChild(grip);
+  card.appendChild(bar);
   if (el.fileId) { const fr = h('div', 'media-frame'); const v = h('video', 'no-drag'); v.controls = true; fileURL(el.fileId).then(u => v.src = u); fr.appendChild(v); card.appendChild(fr); const mt = h('div', 'lk-meta'); mt.innerHTML = `<div class="lk-head">${ICONS.play}<span class="lk-url"></span></div>`; $('.lk-url', mt).textContent = el.name || 'Video'; card.appendChild(mt); return; }
   if (!el.meta) { card.appendChild(h('div', 'lk-loading', 'Caricamento video…')); unfurlInto(el); return; }
   linkBody(el, card, 'video');
 };
 function mapQuery(v) {
-  try { const u = new URL(v); if (/google\.[a-z.]+$|goo\.gl|maps\.app/.test(u.hostname)) { const q = u.searchParams.get('q') || u.searchParams.get('query'); if (q) return q; const m = u.pathname.match(/\/place\/([^/]+)/); if (m) return decodeURIComponent(m[1].replace(/\+/g, ' ')); const at = u.pathname.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/); if (at) return at[1] + ',' + at[2]; } } catch { }
+  try {
+    const u = new URL(v);
+    if (/google\.[a-z.]+$|goo\.gl|maps\.app/.test(u.hostname)) {
+      const q = u.searchParams.get('q') || u.searchParams.get('query');
+      if (q) return q;
+      const m = u.pathname.match(/\/place\/([^/]+)/);
+      if (m) return decodeURIComponent(m[1].replace(/\+/g, ' '));
+      const at = u.pathname.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      if (at) return at[1] + ',' + at[2];
+    }
+  } catch {
+    return v.trim();
+  }
   return v.trim();
 }
 BUILD.map = function (el, card) {
@@ -1225,9 +1243,9 @@ function toggleDraw() {
   document.body.classList.add('drawmode'); $('#tool-draw').classList.add('active');
   updateCtxToolbar(); rer();
 }
-function drawDown(ev) { if (!ev.target.closest('#viewport')) return; ev.preventDefault(); $$('.dt-pop').forEach(p => p.remove()); drawState.surface.down(ev); }
+function drawDown(ev) { if (!ev.target.closest('#viewport')) return; ev.preventDefault(); $$('.dt-pop').forEach(p => p.remove()); drawState.activePointer = ev.pointerId; drawState.surface.down(ev); }
 function drawMove(ev) { drawState.surface.move(ev); }
-function drawUp() { drawState.surface.up(); drawState.rer(); }
+function drawUp(ev) { if (drawState?.activePointer !== ev.pointerId) return; drawState.activePointer = null; drawState.surface.up(); drawState.rer(); }
 function finishDraw(save = true) {
   const st = drawState; if (!st) return; drawState = null;
   document.body.classList.remove('drawmode'); $('#tool-draw').classList.remove('active');
@@ -1602,8 +1620,9 @@ function renderChrome() {
     cr.appendChild(c);
   });
   const t = $('#board-title');
-  if (document.activeElement !== t) t.textContent = b.id === 'home' ? '' : (b.title || 'Senza titolo');
+  if (document.activeElement !== t) t.textContent = b.id === 'home' ? 'Home' : (b.title || 'Senza titolo');
   t.contentEditable = b.id === 'home' ? 'false' : 'true';
+  $('#mobile-back').hidden = !b.parent;
   $('#board-row').classList.toggle('home', b.id === 'home');
   document.body.classList.toggle('home-board', b.id === 'home');
   $('#hdr-right').style.display = b.id === 'home' ? 'none' : '';

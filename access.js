@@ -4,9 +4,15 @@
 'use strict';
 const Access = (() => {
   const TOKEN_KEY = 'bacheca-board-token';
-  const ls = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { } } };
+  const ls = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { console.warn('Salvataggio localStorage non riuscito:', e); } }
+  };
   let available = false;
-  fetch('/api/board/health', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(j => { available = !!j?.ok; }).catch(() => { });
+  fetch('/api/board/health', { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => { available = !!j?.ok; })
+    .catch(() => { available = false; });
 
   const PERMS = [
     ['create', 'Creare card', 'Può aprire nuove card (proposte, problemi trovati).'],
@@ -18,7 +24,8 @@ const Access = (() => {
   const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   async function api(method, path, body) {
     const r = await fetch(path, { method, headers: { Authorization: `Bearer ${ls.get(TOKEN_KEY) || ''}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
-    let j = {}; try { j = await r.json(); } catch { }
+    let j = {};
+    try { j = await r.json(); } catch { j = {}; }
     if (!r.ok) throw new Error(j.error || `Errore ${r.status}`);
     return j;
   }
@@ -150,7 +157,7 @@ const Access = (() => {
     const body = shell(`Chiave di ${name}`);
     body.append(mk('p', 'acc-warn', 'Copia la chiave adesso: non verrà più mostrata. Chi la possiede agisce come ' + name + '.'));
     body.append(copyBox('Chiave', token));
-    const origin = location.origin, mcp = data?.mcpPath || '/percorso/di/bancheca/mcp/bacheca-mcp.js';
+    const origin = location.origin, mcp = data?.mcpPath || '/percorso/di/bacheca/mcp/bacheca-mcp.js';
     if (role === 'agent') {
       body.append(mk('div', 'acc-label', 'Claude Code: incolla nel terminale (vale per tutte le cartelle)'));
       body.append(copyBox('', `claude mcp add --scope user bacheca -e BACHECA_URL=${origin} -e BACHECA_TOKEN=${token} -- node "${mcp}"`));

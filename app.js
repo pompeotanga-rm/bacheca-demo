@@ -37,11 +37,11 @@ function safeHtml(html) {
   const frag = inertFragment(html);
   (function walk(node) {
     for (const n of [...node.childNodes]) {
-      if (n.nodeType === 8) { n.remove(); continue; } // commenti
+      if (n.nodeType === 8) { n.remove(); continue; }
       if (n.nodeType !== 1) continue;
       const tag = n.tagName.toUpperCase();
       if (DROP_TAGS.has(tag)) { n.remove(); continue; }
-      if (!SAFE_TAGS.has(tag)) { walk(n); n.replaceWith(...n.childNodes); continue; } // tag sconosciuto: resta il contenuto
+      if (!SAFE_TAGS.has(tag)) { walk(n); n.replaceWith(...n.childNodes); continue; }
       if (tag === 'IMG') { const src = safeUrl(n.getAttribute('src'), 'img'); if (!src) { n.remove(); continue; } n.setAttribute('src', src); }
       for (const a of [...n.attributes]) {
         const name = a.name.toLowerCase(), v = a.value;
@@ -49,7 +49,7 @@ function safeHtml(html) {
         if (name === 'style') {
           const tmp = n.ownerDocument.createElement('span');
           for (let i = 0; i < n.style.length; i++) { const p = n.style[i], val = n.style.getPropertyValue(p); if (SAFE_STYLE.test(p) && !/url\(|expression|\\|javascript/i.test(val)) tmp.style.setProperty(p, val); }
-          if (tmp.style.cssText) n.setAttribute('style', tmp.style.cssText); else n.removeAttribute('style'); // il browser ricompone le forme brevi
+          if (tmp.style.cssText) n.setAttribute('style', tmp.style.cssText); else n.removeAttribute('style');
           continue;
         }
         let keep = false;
@@ -167,7 +167,11 @@ function updateUndoBtns() { $('#btn-undo').disabled = hist.idx <= 0; $('#btn-red
 
 const E = id => S.elements[id];
 const nextZ = () => ++S.seq;
-function boardEls(b = cur) { return Object.values(S.elements).filter(e => e.board === b && !e.deleted); }
+function boardEls(b = cur) {
+  return Object.values(S.elements).filter(e => e.board === b && !e.deleted
+    && e.type !== 'agentcard' && e.type !== 'agents'
+    && !(e.type === 'line' && (E(e.a)?.type === 'agentcard' || E(e.b)?.type === 'agentcard')));
+}
 // la card "vera" di una board: le scorciatoie (shortcut) puntano alla stessa board ma non la possiedono
 function boardCardOf(boardId) { return Object.values(S.elements).find(e => e.type === 'board' && e.target === boardId && !e.shortcut); }
 function isBoardHidden(bid) { // board whose card (or an ancestor's card) is in trash
@@ -232,15 +236,13 @@ function render() {
   const els = boardEls();
   const vis = new Set(els.map(e => e.id));
   for (const [id, n] of nodes) if (!vis.has(id)) { n.remove(); nodes.delete(id); sel.delete(id); }
-  // columns first so their bodies exist
   const ordered = els.sort((a, b) => (a.type === 'column' ? -1 : 0) - (b.type === 'column' ? -1 : 0));
   for (const el of ordered) ensureNode(el);
-  // place
   for (const el of els) {
     if (el.type === 'line') continue;
     const n = nodes.get(el.id);
     const col = el.col && E(el.col);
-    if (col && !col.deleted && col.board === el.board && col.items.includes(el.id)) continue; // placed by column
+    if (col && !col.deleted && col.board === el.board && col.items.includes(el.id)) continue;
     if (el.col) el.col = null;
     if (n.parentElement !== world()) world().appendChild(n);
     n.style.left = el.x + 'px'; n.style.top = el.y + 'px';
@@ -259,7 +261,6 @@ function placeColumnChildren(col) {
   const body = $('.col-body', n);
   col.items = col.items.filter(id => E(id) && !E(id).deleted && E(id).board === col.board && E(id).type !== 'column' && E(id).type !== 'line');
   col.items.forEach(id => { const el = E(id); el.col = col.id; const c = nodes.get(id); if (c && c.parentElement !== body) body.appendChild(c); });
-  // keep DOM order
   col.items.forEach(id => { const c = nodes.get(id); if (c) body.appendChild(c); });
   const empty = $('.col-empty', body);
   if (col.items.length === 0 && !empty) body.prepend(h('div', 'col-empty', 'Trascina qui le card'));
@@ -274,23 +275,19 @@ function applyDecor(el) {
   n.classList.toggle('selected', sel.has(el.id));
   if (el.color) { n.dataset.color = el.color; n.style.setProperty('--c', el.color); } else { delete n.dataset.color; n.style.removeProperty('--c'); }
   if (el.type === 'board') { const b = S.boards[el.target]; if (b) n.style.setProperty('--c', b.color); delete n.dataset.color; }
-  // dark color → light text
   const dark = el.color && ['#e8584f', '#4b7bf5', '#7d5ce6', '#d9589e', '#6b7075', '#2f3337', '#3db5a8', '#5bb860'].includes(el.color);
   n.style.color = dark && !['heading', 'board'].includes(el.type) ? '#fff' : '';
-  // extras: title / caption / labels / reactions / attached comment
   renderExtras(el, n);
 }
 
 function renderExtras(el, n) {
   const card = $(':scope > .card', n); if (!card) return;
-  // labels
   let lb = $(':scope > .x-labels', card);
   const labels = (el.labels || []).map(id => S.labels[id]).filter(Boolean);
   if (labels.length) {
     if (!lb) { lb = h('div', 'x-labels'); card.prepend(lb); }
     lb.innerHTML = labels.map(l => `<span style="background:${safeColor(l.color)}">${esc(l.name)}</span>`).join('');
   } else if (lb) lb.remove();
-  // title above card
   let tt = $(':scope > .x-title', n);
   if (el.cardTitle != null) {
     if (!tt) {
@@ -301,7 +298,6 @@ function renderExtras(el, n) {
     }
     if (document.activeElement !== tt) tt.textContent = el.cardTitle;
   } else if (tt) tt.remove();
-  // caption below
   let cp = $(':scope > .x-caption', card);
   if (el.cardCaption != null && el.type !== 'image') {
     if (!cp) {
@@ -312,7 +308,6 @@ function renderExtras(el, n) {
     }
     if (document.activeElement !== cp) cp.textContent = el.cardCaption;
   } else if (cp) cp.remove();
-  // reactions
   let rx = $(':scope > .x-react', n);
   const rs = Object.entries(el.reactions || {}).filter(([, c]) => c > 0);
   if (rs.length) {
@@ -320,7 +315,6 @@ function renderExtras(el, n) {
     rx.innerHTML = rs.map(([e, c]) => `<button class="no-drag" data-r="${esc(e)}">${esc(e)} ${esc(c)}</button>`).join('');
     rx.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; const r = b.dataset.r; el.reactions[r] = (el.reactions[r] || 1) - 1; if (el.reactions[r] <= 0) delete el.reactions[r]; commit(); applyDecor(el); };
   } else if (rx) rx.remove();
-  // locked badge
   n.classList.toggle('locked', !!el.locked);
 }
 
@@ -469,7 +463,10 @@ const BUILD = {
       $('button', p).onclick = () => pickFiles('video/*', false, async f => { el.fileId = await storeFile(f[0]); el.name = f[0].name; rebuild(el); commit(); });
       card.appendChild(p); return;
     }
-    card.appendChild(h('div', 'media-head', `<span>▶ ${esc(el.name || shortUrl(el.url))}</span>${el.url ? `<a class="no-drag" target="_blank" rel="noopener" href="${esc(el.url)}">Apri ↗</a>` : ''}`));
+    const head = h('div', 'media-head', `<span class="media-name">▶ ${esc(el.name || shortUrl(el.url))}</span>${el.url ? `<a class="no-drag" target="_blank" rel="noopener" href="${esc(el.url)}">Apri ↗</a>` : ''}`);
+    const grip = h('button', 'media-drag-handle', '⠿ Sposta');
+    grip.type = 'button'; grip.title = 'Trascina qui per spostare il video';
+    head.prepend(grip); card.appendChild(head);
     const fr = h('div', 'media-frame');
     if (el.fileId) { const v = h('video', 'no-drag'); v.controls = true; fileURL(el.fileId).then(u => v.src = u); fr.appendChild(v); }
     else {
@@ -661,6 +658,7 @@ function renderChrome() {
   const t = $('#board-title');
   if (document.activeElement !== t) t.textContent = b.title || 'Senza titolo';
   t.contentEditable = b.id === 'home' ? 'false' : 'true';
+  $('#mobile-back').hidden = !b.parent;
   document.title = (b.title || 'Senza titolo') + ' – Bacheca';
   updateUndoBtns();
 }
@@ -729,6 +727,23 @@ function blurEditing() {
   // Mobile browsers can leave the editable state active after focus moves away.
   // Finish that edit so the next tap can select or open the card.
   if (editing) { editing.ed?.removeEventListener('blur', onEditBlur); onEditBlur(); }
+}
+function keepMobileEditorVisible() {
+  if (innerWidth > 600 || !window.visualViewport) return;
+  const active = document.activeElement;
+  const editable = active?.matches?.('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]');
+  const vv = window.visualViewport;
+  const inset = Math.max(0, innerHeight - vv.height - vv.offsetTop);
+  const keyboardOpen = !!editable && inset > 100;
+  document.body.classList.toggle('mobile-keyboard', keyboardOpen);
+  document.body.style.setProperty('--mobile-keyboard-inset', `${inset}px`);
+  if (!keyboardOpen || !VP().contains(active)) return;
+  requestAnimationFrame(() => {
+    const r = active.getBoundingClientRect();
+    const visibleBottom = vv.offsetTop + vv.height - 16;
+    if (r.bottom > visibleBottom) VP().scrollTop += r.bottom - visibleBottom;
+    if (r.top < 68) VP().scrollTop -= 68 - r.top;
+  });
 }
 function isTyping() { const a = document.activeElement; return a && (a.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(a.tagName)); }
 
@@ -958,6 +973,14 @@ function onPointerDown(ev) {
   if (node) {
     const id = node.dataset.id; const el = E(id);
     if (!el) return;
+    if (t.closest('.media-drag-handle')) {
+      ev.preventDefault();
+      if (editing && editing.id !== id) blurEditing();
+      const wasSelected = sel.has(id);
+      if (!wasSelected || sel.size > 1) { sel.clear(); sel.add(id); refreshSel(); }
+      drag = { kind: 'pending', id, start: toWorld(ev.clientX, ev.clientY), cx: ev.clientX, cy: ev.clientY, wasSelected, ev };
+      return;
+    }
     const interactive = t.closest('.no-drag, input, textarea, button, a, audio, video, iframe, select, [contenteditable="true"], [contenteditable="plaintext-only"]');
     if (interactive) { if (!sel.has(id) || sel.size > 1) { sel.clear(); sel.add(id); refreshSel(); } return; }
     // telefono: un dito su una card NON selezionata fa scorrere la lavagna (ci pensa il browser) e un tocco
@@ -995,7 +1018,9 @@ function onPointerMove(ev) {
     if (Math.hypot(ev.clientX - drag.cx, ev.clientY - drag.cy) < DRAG_THRESHOLD) return;
     if (drag.touchTap) { drag.moved = true; return; } // era uno scorrimento, non un tocco: la card resta dov'è
     if (drag.keepEdit) blurEditing();
-    beginMove(); return;
+    beginMove();
+    if (drag?.kind === 'move') moveSel(ev, p);
+    return;
   }
   if (drag.kind === 'move') return moveSel(ev, p);
   if (drag.kind === 'marquee') return marqueeMove(p);
@@ -1090,6 +1115,18 @@ function moveSel(ev, p) {
       if (target.idx >= kids.length) body.appendChild(ph); else body.insertBefore(ph, kids[target.idx]);
     }
   }
+  $$('.el-board.drop-target').forEach(x => x.classList.remove('drop-target'));
+  drag.dropBoard = boardAt(ev.clientX, ev.clientY, drag.ids);
+  if (drag.dropBoard) nodes.get(drag.dropBoard)?.classList.add('drop-target');
+}
+function boardAt(cx, cy, exclude = []) {
+  for (const n of document.elementsFromPoint(cx, cy)) {
+    const card = n.closest?.('.el-board');
+    if (!card || exclude.includes(card.dataset.id)) continue;
+    const el = E(card.dataset.id);
+    if (el?.target && S.boards[el.target] && canMoveToBoard(el.target, exclude)) return el.id;
+  }
+  return null;
 }
 function columnAt(cx, cy, exclude = []) {
   const cols = boardEls().filter(e => e.type === 'column' && !exclude.includes(e.id) && !e.collapsed).sort((a, b) => b.z - a.z);
@@ -1191,11 +1228,19 @@ function finishPointer(ev) {
   const d = drag;
   if (d.kind[0] === 't') { document.body.classList.remove('dragging'); return tPointerUp(ev); }
   if (d.kind === 'move') {
+    const dropBoard = boardAt(ev.clientX, ev.clientY, d.ids);
     drag = null; document.body.classList.remove('dragging');
     $$('.dragging-el').forEach(n => n.classList.remove('dragging-el'));
-    $$('.col-ph').forEach(x => x.remove()); $$('.el-column.drop-target').forEach(x => x.classList.remove('drop-target'));
+    $$('.col-ph').forEach(x => x.remove()); $$('.el-column.drop-target, .el-board.drop-target').forEach(x => x.classList.remove('drop-target'));
     $('#tool-trash').classList.remove('hot');
     if (d.overTrash) { removeElements(d.ids); return; }
+    if (dropBoard) {
+      const target = E(dropBoard)?.target;
+      if (target && canMoveToBoard(target, d.ids)) {
+        moveElementsToBoard(d.ids, target);
+        sel.clear(); render(); commit(); toast('Spostato in "' + S.boards[target].title + '"', 'Apri', () => openBoard(target)); return;
+      }
+    }
     if (d.dropCol) { insertIntoColumn(d.ids.filter(id => E(id).type !== 'line'), d.dropCol.col, d.dropCol.idx); }
     render(); commit(); return;
   }
@@ -1438,25 +1483,63 @@ function showElementMenu(x, y, ids) {
     }
   });
 }
-function moveToBoardMenu(x, y, ids) {
-  menuAt(x, y, m => {
-    m.appendChild(h('div', 'mlabel', 'Sposta in'));
-    const excluded = new Set(ids.map(E).filter(e => e.type === 'board' && !e.shortcut).map(e => e.target));
-    const isUnder = (b, anc) => { while (b) { if (excluded.has(b)) return true; b = S.boards[b]?.parent; } return false; };
-    Object.values(S.boards).filter(b => b.id !== cur && !isBoardHidden(b.id) && !isUnder(b.id)).forEach(b => {
-      mi(m, `<span class="sq" style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${b.color};margin-right:8px"></span>${esc(b.title)}`, () => {
-        ids.forEach(id => {
-          const e = E(id); if (!e) return;
-          if (e.col) { const c = E(e.col); if (c && !ids.includes(c.id)) { c.items = c.items.filter(x => x !== id); e.col = null; } }
-          e.board = b.id; if (e.type === 'board' && !e.shortcut && S.boards[e.target]) S.boards[e.target].parent = b.id;
-          if (e.type === 'column') e.items.forEach(ci => { E(ci).board = b.id; });
-          if (e.type === 'line') { if (e.a && !ids.includes(e.a)) e.a = null; if (e.b && !ids.includes(e.b)) e.b = null; }
-        });
-        for (const l of boardEls()) if (l.type === 'line') { if (ids.includes(l.a)) l.a = null; if (ids.includes(l.b)) l.b = null; }
-        sel.clear(); commit(); render(); toast('Spostato in "' + b.title + '"', 'Apri', () => openBoard(b.id));
-      });
-    });
+function boardPath(id) {
+  const parts = [], seen = new Set();
+  while (id && S.boards[id] && !seen.has(id)) { seen.add(id); parts.unshift(id === 'home' ? 'Home' : (S.boards[id].title || 'Senza titolo')); id = S.boards[id].parent; }
+  return parts.join(' / ');
+}
+function canMoveToBoard(bid, ids) {
+  if (!S.boards[bid] || isBoardHidden(bid)) return false;
+  const moved = new Set(ids.map(E).filter(e => e?.type === 'board' && !e.shortcut).map(e => e.target));
+  for (let b = bid; b; b = S.boards[b]?.parent) if (moved.has(b)) return false;
+  return true;
+}
+function boardDropSpot(bid, moving = [], ordinal = 0) {
+  const occupied = Object.values(S.elements).filter(e => e.board === bid && !e.deleted && !e.col && !moving.includes(e.id) && !['line', 'agentcard', 'agents'].includes(e.type));
+  let free = 0;
+  for (let row = 0; row < 100; row++) for (let col = 0; col < 3; col++) {
+    const x = 40 + col * 340, y = 40 + row * 160;
+    const collision = occupied.some(e => x < e.x + (e.w || 300) + 20 && x + 300 > e.x - 20 && y < e.y + 160 && y + 130 > e.y - 20);
+    if (!collision && free++ === ordinal) return { x, y };
+  }
+  return { x: 40, y: 40 + (occupied.length + ordinal) * 180 };
+}
+function moveElementsToBoard(ids, bid) {
+  const selected = ids.map(E).filter(Boolean); if (!selected.length || !canMoveToBoard(bid, ids)) return;
+  const source = selected[0].board;
+  let spotIndex = 0;
+  selected.forEach(e => {
+    if (e.col) { const c = E(e.col); if (c && !ids.includes(c.id)) c.items = c.items.filter(x => x !== e.id); e.col = null; }
+    if (e.type !== 'line') { const spot = boardDropSpot(bid, ids, spotIndex++); e.x = spot.x; e.y = spot.y; }
+    e.board = bid;
+    if (e.type === 'board' && !e.shortcut && S.boards[e.target]) S.boards[e.target].parent = bid;
+    if (e.type === 'column') e.items.forEach(ci => { const child = E(ci); if (child) child.board = bid; });
+    if (e.type === 'line') { if (e.a && !ids.includes(e.a)) e.a = null; if (e.b && !ids.includes(e.b)) e.b = null; }
+    touch(e);
   });
+  for (const l of boardEls(source)) if (l.type === 'line') { if (ids.includes(l.a)) l.a = null; if (ids.includes(l.b)) l.b = null; }
+}
+function moveToBoardMenu(x, y, ids) {
+  const selected = ids.map(E).filter(Boolean); if (!selected.length) return;
+  const source = selected[0].board || cur;
+  const isUnder = bid => !canMoveToBoard(bid, ids);
+  const move = bid => {
+    moveElementsToBoard(ids, bid);
+    sel.clear(); commit(); render(); toast('Spostato in "' + S.boards[bid].title + '"', 'Apri', () => openBoard(bid));
+  };
+  const show = bid => menuAt(x, y, m => {
+    const from = h('div', 'mlabel'); from.textContent = 'Da: ' + boardPath(source); m.appendChild(from);
+    const current = h('div', 'mlabel'); current.textContent = 'Destinazione: ' + boardPath(bid); m.appendChild(current);
+    if (bid !== source && !isUnder(bid)) mi(m, 'Sposta qui', () => move(bid));
+    msep(m);
+    const parent = S.boards[bid]?.parent;
+    if (parent && !isUnder(parent)) mi(m, '↑ ' + esc(S.boards[parent]?.title || 'Home'), () => show(parent));
+    const children = Object.values(S.boards).filter(b => b.parent === bid && !isBoardHidden(b.id) && !isUnder(b.id));
+    children.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'it'));
+    children.forEach(b => mi(m, '▣ ' + esc(b.title || 'Senza titolo') + ' ›', () => show(b.id)));
+    if (!children.length && !parent) { const empty = h('div', 'mlabel', 'Nessuna sotto-board'); m.appendChild(empty); }
+  });
+  show(source);
 }
 function openColorMenu(anchor, els) {
   const r = anchor.getBoundingClientRect();
@@ -1540,6 +1623,7 @@ function showCanvasMenu(x, y, wp) {
 }
 function hidePopups(keepPanel) {
   $('#ctxmenu').classList.add('hidden'); $('#more-menu').classList.add('hidden'); $('#tool-more').classList.remove('active');
+  $('#mobile-actions').classList.add('hidden'); $('#mobile-actions-btn').setAttribute('aria-expanded', 'false');
   $$('.hdr-menu').forEach(x => x.remove());
   if (!keepPanel) closePanel();
 }
@@ -1778,6 +1862,9 @@ async function importAll(f) {
   let data;
   try { data = JSON.parse(await f.text()); } catch { data = null; }
   if (!validBackup(data)) return toast('File di backup non valido: i dati attuali non sono stati modificati');
+  // con la lavagna condivisa il ripristino sostituisce lo stato anche sul server: ciò che non è nel
+  // backup viene eliminato per tutti i dispositivi, quindi serve una conferma esplicita
+  if (typeof Sync !== 'undefined' && Sync.active() && !confirm('La lavagna è condivisa: il backup sostituirà le board sul server e su tutti i dispositivi collegati, e ciò che non è nel backup verrà eliminato ovunque. Continuare?')) return toast('Ripristino annullato: i dati attuali non sono stati modificati');
   // 2. si caricano i file; 3. solo alla fine si sostituisce lo stato
   try {
     for (const [k, v] of Object.entries(data.files || {})) { const bl = await (await fetch(v.data)).blob(); await DB.put('files', k, bl); if (typeof Sync !== 'undefined') Sync.uploadFile(k); }
@@ -1919,14 +2006,29 @@ async function init() {
   $('#btn-notif').onclick = () => openPanel('notif'); $('#btn-settings').onclick = () => openPanel('settings');
   $('#btn-export').onclick = e => { e.stopPropagation(); exportMenu(e.currentTarget); };
   $('#btn-view').onclick = e => { e.stopPropagation(); viewMenu(e.currentTarget); };
-  $('#zoom-in').onclick = () => zoomBy(1.2); $('#zoom-out').onclick = () => zoomBy(1 / 1.2); $('#zoom-val').onclick = () => setZoom(1);
+  $('#mobile-back').onclick = () => openBoard(S.boards[cur]?.parent || 'home');
+  $('#mobile-actions-btn').onclick = e => {
+    e.stopPropagation(); const menu = $('#mobile-actions'); const show = menu.classList.contains('hidden');
+    hidePopups(); menu.classList.toggle('hidden', !show); e.currentTarget.setAttribute('aria-expanded', String(show));
+  };
+  $('#mobile-actions').addEventListener('pointerdown', e => e.stopPropagation());
+  $('#mobile-actions').addEventListener('click', e => {
+    const action = e.target.closest('[data-mobile-action]')?.dataset.mobileAction;
+    if (!action) return;
+    hidePopups();
+    if (action === 'view') viewMenu($('#mobile-actions-btn'));
+    else if (action === 'export') exportMenu($('#mobile-actions-btn'));
+    else if (action === 'unsorted') toggleUnsorted();
+    else openPanel(action);
+  });
+  $('#zoom-in').onclick = () => zoomBy(1.2); $('#zoom-out').onclick = () => zoomBy(1 / 1.2); $('#zoom-fit').onclick = zoomToFit; $('#zoom-val').onclick = () => setZoom(1);
   const bt = $('#board-title');
   bt.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); bt.blur(); } e.stopPropagation(); });
   bt.addEventListener('input', () => { S.boards[cur].title = bt.textContent; const c = boardCardOf(cur); if (c) { const n = nodes.get(c.id); } });
   bt.addEventListener('blur', () => { const b = S.boards[cur]; b.title = bt.textContent.trim() || 'Senza titolo'; bt.textContent = b.title; renderChrome(); commit(); });
 
   // canvas
-  document.addEventListener('pointerdown', ev => { if (!ev.target.closest('#ctxmenu, #more-menu, #panel, .hdr-menu, #tool-more, #formatbar, #toast, #overlay, #ctxbar')) hidePopups(true); if (!ev.target.closest('#panel, #topbar')) closePanel(); });
+  document.addEventListener('pointerdown', ev => { if (!ev.target.closest('#ctxmenu, #more-menu, #mobile-actions, #mobile-actions-btn, #panel, .hdr-menu, #tool-more, #formatbar, #toast, #overlay, #ctxbar')) hidePopups(true); if (!ev.target.closest('#panel, #topbar, #mobile-actions')) closePanel(); });
   VP().addEventListener('pointerdown', onPointerDown);
   addEventListener('pointermove', ev => { lastMouse = { x: ev.clientX, y: ev.clientY }; onPointerMove(ev); });
   addEventListener('pointerup', finishPointer);
@@ -1970,6 +2072,10 @@ async function init() {
   addEventListener('paste', onPaste);
   addEventListener('copy', e => { if (TBL.st && !TBL.st.editing) { e.preventDefault(); tCopy(false); return; } if (!isTyping() && sel.size) { copySel(false); e.preventDefault(); } });
   addEventListener('resize', () => { updateStageSize(); positionFormatBar(); });
+  window.visualViewport?.addEventListener('resize', keepMobileEditorVisible);
+  window.visualViewport?.addEventListener('scroll', keepMobileEditorVisible);
+  document.addEventListener('focusin', keepMobileEditorVisible);
+  document.addEventListener('focusout', () => setTimeout(keepMobileEditorVisible, 100));
   addEventListener('popstate', () => { const id = location.hash.replace('#/', '') || 'home'; if (id !== cur) openBoard(S.boards[id] ? id : 'home'); });
   addEventListener('beforeunload', () => { clearTimeout(saveTimer); if (S) DB.put('kv', 'state', S).catch(() => { }); });
   // sul telefono la pagina può essere chiusa senza beforeunload: si salva appena va in secondo piano
